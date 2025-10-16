@@ -90,7 +90,7 @@ print(f"Temperature: {results['temperature']:.1f} K")
 ```yaml
 # config.yaml
 spectrum_path: /path/to/spectrum.txt
-directory_path: /path/to/output/
+directory_path: /path/to/downloaded_files/
 
 # RMS noise (null for automatic determination)
 rms_noise: null
@@ -232,7 +232,7 @@ assigned = peaks[peaks['carrier_molecules'] != "['Unidentified']"]
 strongest = assigned.nlargest(10, 'experimental_intensity_max')
 
 # Load column densities
-columns = pd.read_csv('output/column_density_results.csv')
+columns = pd.read_csv('directory/column_density_results.csv')
 print(columns.sort_values('column_density', ascending=False))
 ```
 
