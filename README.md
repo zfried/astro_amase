@@ -3,7 +3,6 @@
 **Automated Molecular Assignment and Source Parameter Estimation in Radio Astronomical Observations**
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Astro AMASE is a comprehensive Python package for automated molecular line identification in radio astronomical observations. It combines spectroscopic analysis, structural relevance scoring, and best-fit modeling to provide robust molecular assignments.
 
@@ -28,7 +27,7 @@ Astro AMASE is a comprehensive Python package for automated molecular line ident
 
 ## Installation
 
-### From PyPI (once published)
+### From PyPI (once published, which hasn't happened yet)
 
 ```bash
 pip install astro_amase
@@ -42,33 +41,15 @@ cd astro_amase
 pip install -e .
 ```
 
-### For Development
-
-```bash
-git clone https://github.com/zfried/astro_amase.git
-cd astro_amase
-pip install -r requirements.txt
-pip install -e .
-```
-
 ## Quick Start
 
-### Using a Configuration File
+### Required Database Files
 
-```python
-import astro_amase
-
-# Run complete analysis
-results = astro_amase.assign_observations('config.yaml')
-
-# Access results
-print(f"Assigned lines: {results['statistics']['assigned']}")
-print(f"Detected molecules: {results['statistics']['unique_detected_molecules']}")
-print(f"VLSR: {results['vlsr']:.2f} km/s")
-print(f"Temperature: {results['temperature']:.1f} K")
-```
+The package requires several files to be downloaded from the following [Dropbox folder](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
 
 ### Using Direct Parameters
+
+There are several usage examples in the `notebooks/example_notebook.ipynb` file.
 
 ```python
 import astro_amase
@@ -87,44 +68,24 @@ results = astro_amase.assign_observations(
 )
 ```
 
-### Command-Line Interface
 
-```bash
-# Interactive mode
-astro-amase
+### Using a Configuration File
 
-# With config file
-astro-amase --config config.yaml
+```python
+import astro_amase
+
+# Run complete analysis
+results = astro_amase.assign_observations('config.yaml')
+
+# Access results
+print(f"Assigned lines: {results['statistics']['assigned']}")
+print(f"Detected molecules: {results['statistics']['unique_detected_molecules']}")
+print(f"VLSR: {results['vlsr']:.2f} km/s")
+print(f"Temperature: {results['temperature']:.1f} K")
 ```
+
 
 ## Configuration File Example
-
-```yaml
-# config.yaml
-spectrum_path: /path/to/spectrum.txt
-directory_path: /path/to/output/
-
-# RMS noise (null for automatic determination)
-rms_noise: null
-
-# Line detection threshold
-sigma_threshold: 5.0
-
-# Source parameters
-vlsr: null  # Will be determined automatically
-temperature: 150.0
-temperature_is_exact: false
-
-# Observation setup
-observation_type: interferometric
-beam_major_axis: 0.5
-beam_minor_axis: 0.5
-source_size: 1E20
-continuum_temperature: 2.7
-
-# Valid atoms
-valid_atoms: "C, O, H, N, S"
-```
 
 See `examples/config_template.yaml` for a complete template.
 
@@ -132,27 +93,19 @@ See `examples/config_template.yaml` for a complete template.
 
 ### Spectrum File Format
 
-Plain text file with two columns (space or tab separated):
+Plain text file with two columns (space or tab separated) and no header:
 - Column 1: Frequency (MHz)
-- Column 2: Intensity (Kelvin or Jy/beam)
+- Column 2: Intensity (Kelvin)
+
+The code was designed for data with intensity units of K. For accurate determination of column density and temperature, the intensity units must indeed be in K. However, even if the data are in Jy/beam, the line assignments should still be reasonably reliable.
 
 Example:
 ```
-# frequency_MHz  intensity_K
 345000.0        0.05
 345000.1        0.06
 345000.2        0.08
 ...
 ```
-
-### Required Database Files
-
-The package requires CDMS/JPL molecular database files in the working directory:
-- `all_cdms_final_official.csv`
-- `all_jpl_final_official.csv`
-- `cdms_pkl/` directory with pickled molecule objects
-- `jpl_pkl/` directory with pickled molecule objects
-- `transitions_database.pkl.gz`
 
 ## Output Files
 
@@ -162,7 +115,6 @@ Running the analysis produces several output files:
   - Observed spectrum (black)
   - Total fitted spectrum (red)
   - Individual molecular contributions (colored, toggleable)
-  - Peak identifications
 
 - **`final_peak_results.csv`**: Peak-by-peak assignments
   ```csv
@@ -200,12 +152,12 @@ Running the analysis produces several output files:
    - Least-squares optimization
 
 4. **Dataset Creation**
-   - Query CDMS/JPL for candidates within Δν
+   - Query CDMS/JPL/LSD for candidates within Δν
    - Simulate spectra at observational parameters
    - Filter duplicates and apply quality control
 
 5. **Iterative Line Assignment**
-   - Static checks (invalid atoms, vibrational states)
+   - Static checks (invalid atoms, vibrational states, intensity checks)
    - Dynamic scoring (structural relevance via VICGAE)
    - Softmax and combined score calculation
    - Reassignment when new molecules detected
@@ -226,11 +178,6 @@ results = astro_amase.assign_observations('config.yaml')
 # Get the assigner object
 assigner = results['assigner']
 
-# Detected molecules summary
-mol_summary = assigner.get_detected_molecules_summary()
-for smiles, info in mol_summary.items():
-    print(f"{info['formula']}: {info['count']} detections")
-
 # Individual line details
 for line in assigner.lines[:10]:  # First 10 lines
     if line.assignment_status:
@@ -246,29 +193,20 @@ for line in assigner.lines[:10]:  # First 10 lines
 import pandas as pd
 
 # Load peak results
-peaks = pd.read_csv('output/final_peak_results.csv')
+peaks = pd.read_csv('directory/final_peak_results.csv')
 
 # Find strongest assigned lines
 assigned = peaks[peaks['carrier_molecules'] != "['Unidentified']"]
 strongest = assigned.nlargest(10, 'experimental_intensity_max')
 
 # Load column densities
-columns = pd.read_csv('output/column_density_results.csv')
+columns = pd.read_csv('directory/column_density_results.csv')
 print(columns.sort_values('column_density', ascending=False))
 ```
 
 ## Citation
 
-If you use Astro AMASE in your research, please cite:
-
-```bibtex
-@software{astro_amase,
-  author = {Fried, Zachary},
-  title = {Astro AMASE: Automated Molecular Assignment and Source parameter Estimation},
-  year = {2025},
-  url = {https://github.com/zfried/astro_amase}
-}
-```
+Paper is in prep!
 
 ## Requirements
 
@@ -286,17 +224,8 @@ If you use Astro AMASE in your research, please cite:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+TBD
 
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ## Support
 
@@ -306,10 +235,11 @@ For questions, issues, or feedback:
 
 ## Acknowledgments
 
-- CDMS (Cologne Database for Molecular Spectroscopy)
-- JPL Molecular Spectroscopy Database
-- astrochem_embedding for VICGAE structural relevance scoring
-- molsim for spectral simulation tools
+- [CDMS](https://cdms.astro.uni-koeln.de/classic/) (Cologne Database for Molecular Spectroscopy)
+- [JPL](https://spec.jpl.nasa.gov/) Molecular Spectroscopy Database
+- [LSD](https://lsd.univ-lille.fr/) (Lille Spectroscopic Database)
+- [astrochem_embedding](https://github.com/laserkelvin/astrochem_embedding) for VICGAE structural relevance scoring
+- [molsim](https://github.com/bmcguir2/molsim) for spectral simulation tools
 
 ## Changelog
 
@@ -317,4 +247,4 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
-**Astro AMASE** - Making molecular line identification in radio astronomy automated and accessible.
+**Astro AMASE** - Making molecular line identification in radio astronomy automated.
