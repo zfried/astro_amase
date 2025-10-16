@@ -491,7 +491,7 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
         #determining the top densest windows of +/- dV in the vlsr distribution
         top_bins = (top_k_densest_windows(total_vlsrs, window_radius=1*dv_value, top_k=10))
         #print(total_vlsrs)
-        print(top_bins)
+        #print(top_bins)
         mol_list = []
         labels = [] 
         indivBin = []
