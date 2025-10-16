@@ -45,7 +45,7 @@ pip install -e .
 
 ### Required Database Files
 
-The package requires several files to be downloaded from the following [Dropbox folder]([https://www.dropbox.com/s/your-folder-link-here](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
+The package requires several files to be downloaded from the following [Dropbox folder](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
 
 ### Using Direct Parameters
 
@@ -267,11 +267,11 @@ For questions, issues, or feedback:
 
 ## Acknowledgments
 
-- CDMS (Cologne Database for Molecular Spectroscopy)
-- JPL Molecular Spectroscopy Database
-- LSD (Lille Spectroscopic Database)
-- astrochem_embedding for VICGAE structural relevance scoring
-- molsim for spectral simulation tools
+- [CDMS](https://cdms.astro.uni-koeln.de/classic/) (Cologne Database for Molecular Spectroscopy)
+- [JPL](https://spec.jpl.nasa.gov/) Molecular Spectroscopy Database
+- [LSD](https://lsd.univ-lille.fr/) (Lille Spectroscopic Database)
+- [astrochem_embedding](https://github.com/laserkelvin/astrochem_embedding) for VICGAE structural relevance scoring
+- [molsim](https://github.com/bmcguir2/molsim) for spectral simulation tools
 
 ## Changelog
 
