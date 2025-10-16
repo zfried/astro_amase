@@ -87,33 +87,6 @@ print(f"Temperature: {results['temperature']:.1f} K")
 
 ## Configuration File Example
 
-```yaml
-# config.yaml
-spectrum_path: /path/to/spectrum.txt
-directory_path: /path/to/downloaded_files/
-
-# RMS noise (null for automatic determination)
-rms_noise: null
-
-# Line detection threshold
-sigma_threshold: 5.0
-
-# Source parameters
-vlsr: null  # Will be determined automatically
-temperature: 150.0
-temperature_is_exact: false
-
-# Observation setup
-observation_type: interferometric
-beam_major_axis: 0.5
-beam_minor_axis: 0.5
-source_size: 1E20
-continuum_temperature: 2.7
-
-# Valid atoms
-valid_atoms: "C, O, H, N, S"
-```
-
 See `examples/config_template.yaml` for a complete template.
 
 ## Input Requirements
