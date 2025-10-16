@@ -1,0 +1,61 @@
+# ===== CONFIG TEMPLATE (YAML) =====
+
+# Astro AMASE Configuration File
+# All paths should be absolute or relative to the execution directory
+# to run: python3 astro_amase.py --config config_template.yaml
+
+# Spectrum file (must be .txt with frequency in MHz and intensity)
+spectrum_path: /Users/zacharyfried/Desktop/nrao_2025/astro_analysis/pils.txt
+
+# Output directory (where files are stored and outputs will be saved)
+directory_path: /Users/zacharyfried/Desktop/nrao_2025/astro_analysis/
+
+# RMS noise level
+# Set to null if you want it determined automatically from the data
+rms_noise: null
+# rms_noise: 0.01  # Uncomment and set value if you know the RMS noise
+
+# Sigma threshold for line detection (lines > sigma*rms will be assigned)
+sigma_threshold: 5.0
+
+# VLSR (velocity with respect to LSR) in km/s
+# Set to null if unknown (code will determine it)
+vlsr: null
+
+# Excitation temperature in Kelvin
+temperature: 150.0
+
+# Is the temperature exact? (true/false)
+# If false, code will estimate within ±100K
+# Must be true if vlsr is provided
+temperature_is_exact: false
+
+# Observation type: 'single_dish' or 'interferometric' (or '1' or '2')
+observation_type: interferometric
+
+# For single dish: dish diameter in meters
+#dish_diameter: 100.0
+
+# For interferometric: beam parameters in arcseconds
+beam_major_axis: 0.4
+beam_minor_axis: 0.4
+
+# Source diameter in arcseconds (use 1E20 if source fills the beam)
+source_size: 1E20
+
+# Continuum temperature in Kelvin (2.7 if just the CMB)
+continuum_temperature: 13
+
+# Valid atoms that could be present
+# Options: comma-separated string, list format, "default", or "all"
+valid_atoms: "C, O, H, N, S"
+
+# Alternative formats for valid_atoms:
+# valid_atoms:           # list format
+#   - C
+#   - O
+#   - H
+#   - N
+#   - S
+# valid_atoms: default   # uses DEFAULT_VALID_ATOMS [C,O,H,N,S]
+# valid_atoms: all       # uses ALL_VALID_ATOMS (entire periodic table)
