@@ -1,0 +1,10 @@
+pandas
+numpy
+rdkit
+scipy
+bokeh
+numba
+astropy
+matplotlib
+pyyaml
+astrochem_embedding

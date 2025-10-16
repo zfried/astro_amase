@@ -1,0 +1,115 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "astro_amase"
+dynamic = ["version"]
+description = "Automated Molecular Assignment and Source parameter Estimation for radio astronomy"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [
+    {name = "Zachary Fried", email = "zfried@mit.edu"}
+]
+maintainers = [
+    {name = "Zachary Fried", email = "zfried@mit.edu"}
+]
+keywords = [
+    "astronomy",
+    "spectroscopy",
+    "molecular",
+    "radio astronomy",
+    "line identification",
+    "astrochemistry",
+    "VLSR",
+    "spectral analysis"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "Topic :: Scientific/Engineering :: Chemistry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "pandas>=1.3.0",
+    "numpy>=1.20.0",
+    "rdkit>=2021.09.1",
+    "scipy>=1.7.0",
+    "bokeh>=2.4.0",
+    "numba>=0.54.0",
+    "astropy>=4.3.0",
+    "matplotlib>=3.4.0",
+    "pyyaml>=5.4.0",
+    "astrochem_embedding>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=3.0",
+    "black>=22.0",
+    "flake8>=4.0",
+    "mypy>=0.950",
+]
+
+[project.urls]
+Homepage = "https://github.com/zfried/astro_amase"
+Documentation = "https://github.com/zfried/astro_amase/blob/main/README.md"
+Repository = "https://github.com/zfried/astro_amase"
+"Bug Tracker" = "https://github.com/zfried/astro_amase/issues"
+Changelog = "https://github.com/zfried/astro_amase/blob/main/CHANGELOG.md"
+
+[project.scripts]
+astro-amase = "astro_amase.main:cli_entry"
+
+[tool.setuptools]
+packages = ["astro_amase"]
+
+[tool.setuptools.dynamic]
+version = {attr = "astro_amase.version.__version__"}
+
+[tool.setuptools.package-data]
+astro_amase = ["examples/*.yaml"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=astro_amase --cov-report=html --cov-report=term"
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
