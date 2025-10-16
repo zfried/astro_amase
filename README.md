@@ -178,11 +178,6 @@ results = astro_amase.assign_observations('config.yaml')
 # Get the assigner object
 assigner = results['assigner']
 
-# Detected molecules summary
-mol_summary = assigner.get_detected_molecules_summary()
-for smiles, info in mol_summary.items():
-    print(f"{info['formula']}: {info['count']} detections")
-
 # Individual line details
 for line in assigner.lines[:10]:  # First 10 lines
     if line.assignment_status:
