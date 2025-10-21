@@ -241,9 +241,6 @@ For questions, issues, or feedback:
 - [astrochem_embedding](https://github.com/laserkelvin/astrochem_embedding) for VICGAE structural relevance scoring
 - [molsim](https://github.com/bmcguir2/molsim) for spectral simulation tools
 
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for version history.
 
 ---
 
