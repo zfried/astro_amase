@@ -39,7 +39,7 @@ __all__ = [
     'get_source_parameters',
     'show_fit_in_notebook',
     'plot_from_saved',
-    'get_individual_plots'
+    'get_individual_plots',
     'DEFAULT_VALID_ATOMS',
     'ALL_VALID_ATOMS',
     'ckm',
