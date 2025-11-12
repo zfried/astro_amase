@@ -1,7 +1,7 @@
 pandas
 numpy
 torch
-rdkit-pypi
+rdkit
 scipy
 bokeh
 numba
