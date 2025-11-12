@@ -1,12 +1,12 @@
-pandas
-numpy
-torch
-rdkit
-scipy
-bokeh
-numba
-astropy
-matplotlib
-pyyaml
-astrochem_embedding
+pandas>=1.3.0
+numpy>=1.20.0
+torch>=1.10.0
+rdkit>=2021.09.1
+scipy>=1.7.0,<1.14.0
+bokeh>=2.4.0
+numba>=0.54.0
+astropy>=4.3.0
+matplotlib>=3.4.0
+pyyaml>=5.4.0
+astrochem_embedding>=0.1.0
 group-selfies @ git+https://github.com/aspuru-guzik-group/group-selfies.git
