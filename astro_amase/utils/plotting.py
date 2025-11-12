@@ -572,8 +572,8 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
     dv_value_freq = determined_params['linewidth_mhz']
     rms_noise = determined_params['rms_noise']
 
-    print('temp',temp)
-    print('vlsr_value', vlsr_value )
+    #print('temp',temp)
+    #print('vlsr_value', vlsr_value )
     
     if minimum_intensity == 'default': #if default, get all lines down to the rms noise
         minimum_intensity = rms_noise
@@ -650,13 +650,13 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
         filtered_mols = [filtered_mols[i] for i in range(len(filtered_labels)) if filtered_labels[i] in mols_to_display]
         filtered_labels = [filtered_labels[i] for i in range(len(filtered_labels)) if filtered_labels[i] in mols_to_display]
 
-    print(f"Total filtered molecules to process: {len(filtered_mols)}")
-    print(f"Filtered labels: {filtered_labels}")
-    print(f"Fitted columns: {fitted_columns}")
+    #print(f"Total filtered molecules to process: {len(filtered_mols)}")
+    #print(f"Filtered labels: {filtered_labels}")
+    #print(f"Fitted columns: {fitted_columns}")
     # Individual molecules
     for i, (mol, col, label) in enumerate(zip(filtered_mols, fitted_columns, filtered_labels)):
-        print(label)
-        print(f"Scientific notation: {col:e}")
+        #print(label)
+        #print(f"Scientific notation: {col:e}")
         cat = mol.catalog
         cat_freqs = cat.frequency
         logints = cat.logint
@@ -664,16 +664,16 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
         qn_ups = cat.qnup_str
         qn_lows = cat.qnlow_str
 
-        print("=" * 60)
-        print("Values in Scientific Notation")
-        print("=" * 60)
-        print(f"Tex (Temperature):     {temp:e}")
-        print(f"column:                {col:e}")
-        print(f"size:                  {input_params['source_size']:e}")
-        print(f"dV:                    {dv_value:e}")
-        print(f"velocity:              {vlsr_value:e}")
+        #print("=" * 60)
+        #print("Values in Scientific Notation")
+        #print("=" * 60)
+        #print(f"Tex (Temperature):     {temp:e}")
+        #print(f"column:                {col:e}")
+        #print(f"size:                  {input_params['source_size']:e}")
+        #print(f"dV:                    {dv_value:e}")
+        #print(f"velocity:              {vlsr_value:e}")
         #print(f"continuum:             {cont:e}")
-        print("=" * 60)
+        #print("=" * 60)
 
         src = Source(
             Tex=temp, column=col, size=input_params['source_size'],
