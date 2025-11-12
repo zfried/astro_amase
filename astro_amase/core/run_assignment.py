@@ -245,7 +245,8 @@ def load_dataset(direc: str, numMols: int = None) -> Tuple:
 
 def run_assignment(temp: float, direc: str, splatDict: Dict, 
                   validAtoms: List[str], dv_value_freq: float, 
-                  rms: float, peak_freqs_full: np.ndarray) -> Tuple:
+                  rms: float, peak_freqs_full: np.ndarray,
+                  known_molecules: List[str] = None) -> Tuple:
     """
     Main function to run the iterative spectrum assignment.
     
@@ -257,10 +258,15 @@ def run_assignment(temp: float, direc: str, splatDict: Dict,
         dv_value_freq: Frequency tolerance
         rms: RMS noise level
         peak_freqs_full: Array of all peak frequencies
+        known_molecules: Optional list of SMILES strings for molecules known to be present.
+                        These molecules will always be maintained in the detected list.
     
     Returns:
         Tuple of (assigner, statistics)
     """
+    
+    if known_molecules is None:
+        known_molecules = []
     
     print(f"Loading dataset from {direc}...")
     
@@ -271,6 +277,11 @@ def run_assignment(temp: float, direc: str, splatDict: Dict,
     
     print(f"Loaded {len(actualFrequencies)} spectral lines")
     print(f"Found {len(totalSmiles)} unique molecular candidates")
+    
+    if known_molecules:
+        print(f"Using {len(known_molecules)} known molecules that will always be maintained in detected list:")
+        for smiles in known_molecules:
+            print(f"  - {smiles}")
     
     # Create scoring context
     context = ScoringContext(
@@ -283,7 +294,8 @@ def run_assignment(temp: float, direc: str, splatDict: Dict,
         valid_atoms=validAtoms,
         ignore_isotopologues=ignoreIso,
         peak_freqs_full=peak_freqs_full,
-        total_smiles=totalSmiles
+        total_smiles=totalSmiles,
+        known_molecules=known_molecules
     )
     
     # Initialize the assignment system
@@ -351,7 +363,6 @@ def run_assignment(temp: float, direc: str, splatDict: Dict,
     
     return assigner, stats
 
-
 def save_results(assigner: IterativeSpectrumAssignment, 
                 direc: str, temp: float):
     """
@@ -411,7 +422,25 @@ def save_results(assigner: IterativeSpectrumAssignment,
     #print(f"  {assigned_file}")
 
 
-def run_full_assignment(temp,direc,splatDict,valid_atoms,dv_value_freq, rms, peak_freqs_full):
+def run_full_assignment(temp, direc, splatDict, valid_atoms, dv_value_freq, 
+                       rms, peak_freqs_full, known_molecules=None):
+    """
+    Complete assignment workflow with result saving.
+    
+    Args:
+        temp: Temperature in Kelvin
+        direc: Directory containing data files
+        splatDict: Dictionary of spectral catalogs
+        valid_atoms: List of valid atomic symbols
+        dv_value_freq: Frequency tolerance
+        rms: RMS noise level
+        peak_freqs_full: Array of all peak frequencies
+        known_molecules: Optional list of SMILES strings for molecules known to be present.
+                        These molecules will always be maintained in the detected list.
+    
+    Returns:
+        Tuple of (assigner, statistics)
+    """
     assigner, stats = run_assignment(
         temp=temp,
         direc=direc,
@@ -419,11 +448,16 @@ def run_full_assignment(temp,direc,splatDict,valid_atoms,dv_value_freq, rms, pea
         validAtoms=valid_atoms,
         dv_value_freq=dv_value_freq,
         rms=rms,
-        peak_freqs_full=peak_freqs_full
+        peak_freqs_full=peak_freqs_full,
+        known_molecules=known_molecules
     )
     
     # Save results
     save_results(assigner, direc, temp)
+
+    #output_file = os.path.join(direc, f'unassigned_analysis_{int(temp)}.txt')
+    #assigner.generate_unassigned_analysis(output_file)
+
 
     return assigner, stats
 

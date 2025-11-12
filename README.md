@@ -33,7 +33,7 @@ Astro AMASE is a comprehensive Python package for automated molecular line ident
 pip install astro_amase
 ```
 
-### From Source
+### From Source (required for now)
 
 ```bash
 git clone https://github.com/zfried/astro_amase.git
@@ -47,9 +47,17 @@ pip install -e .
 
 The package requires several files to be downloaded from the following [Dropbox folder](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
 
-### Using Direct Parameters
+### 📓 Extensive Usage Examples
 
-There are several usage examples in the `notebooks/example_notebook.ipynb` file.
+**For comprehensive usage examples and workflows, see [notebooks/example_notebook.ipynb](notebooks/example_notebook.ipynb).**
+
+The example notebook demonstrates:
+- Complete end-to-end analysis workflows
+- Parameter selection
+- Visualization techniques
+- Post-processing and interpretation of results
+
+### Basic Usage
 
 ```python
 import astro_amase
@@ -68,32 +76,11 @@ results = astro_amase.assign_observations(
 )
 ```
 
-
-### Using a Configuration File
-
-```python
-import astro_amase
-
-# Run complete analysis
-results = astro_amase.assign_observations('config.yaml')
-
-# Access results
-print(f"Assigned lines: {results['statistics']['assigned']}")
-print(f"Detected molecules: {results['statistics']['unique_detected_molecules']}")
-print(f"VLSR: {results['vlsr']:.2f} km/s")
-print(f"Temperature: {results['temperature']:.1f} K")
-```
-
-
-## Configuration File Example
-
-See `examples/config_template.yaml` for a complete template.
-
 ## Input Requirements
 
 ### Spectrum File Format
 
-Plain text file with two columns (space or tab separated) and no header:
+Plain text file with two columns (space or tab separated) and no header. Frequency must be in increasing order:
 - Column 1: Frequency (MHz)
 - Column 2: Intensity (Kelvin)
 
@@ -135,6 +122,12 @@ Running the analysis produces several output files:
   H2CO,8.2e14,C=O
   ```
 
+- **`analysis_parameters.json`**: Report of parameters used in code:
+  - Stores value of the determined vlsr, temperature, linewidth, etc.
+  - Stores some assignment summary statistics
+  - Required for some subsequent plotting functionality
+
+
 ## Algorithm Overview
 
 1. **Data Loading & Peak Detection**
@@ -169,6 +162,73 @@ Running the analysis produces several output files:
    - Generate visualizations
 
 ## Advanced Usage
+
+### Interactive Plotting Functions
+
+Astro AMASE provides several plotting utilities for visualizing and analyzing results:
+
+#### Display Results in Notebook
+
+Show the interactive Bokeh plot directly in a Jupyter notebook:
+
+```python
+import astro_amase
+
+# Run analysis
+results = astro_amase.assign_observations(...)
+
+# Display interactive plot in notebook
+astro_amase.show_fit_in_notebook(results)
+
+# Or display only specific molecules
+astro_amase.show_fit_in_notebook(results, mols_to_display=['CH3OH', 'H2CO'])
+```
+
+#### Recreate Plots from Saved Data
+
+Generate interactive plots from previously saved analysis results:
+
+```python
+from astro_amase.utils.plotting import plot_from_saved
+
+plot_from_saved(
+    spectrum_path='spectrum.txt',
+    directory_path='./analysis/',
+    column_density_csv='./analysis/column_density_results.csv',
+    stored_json='./analysis/output_parameters.json'
+)
+
+# Filter to specific molecules
+plot_from_saved(
+    spectrum_path='spectrum.txt',
+    directory_path='./analysis/',
+    column_density_csv='./analysis/column_density_results.csv',
+    stored_json='./analysis/output_parameters.json',
+    mols_to_display=['CH3OH', 'CH3CN', 'H2CO']
+)
+```
+
+#### Generate Individual Peak Plots
+
+Create detailed PDF files showing individual spectral peaks with quantum number assignments:
+
+```python
+from astro_amase.utils.plotting import get_individual_plots
+
+get_individual_plots(
+    spectrum_path='spectrum.txt',
+    directory_path='./analysis/',
+    column_density_csv='./analysis/column_density_results.csv',
+    stored_json='./analysis/output_parameters.json',
+    minimum_intensity='default'  # or specify a custom threshold
+)
+```
+
+This generates `{molecule_name}_peaks.pdf` files containing:
+- 3-column grid of individual peak subplots
+- Observed spectrum (black) and simulated spectrum (red) for each peak
+- Quantum number assignments from catalog
+- Peaks sorted by intensity
 
 ### Accessing Detailed Results
 

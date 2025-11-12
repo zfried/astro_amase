@@ -15,7 +15,7 @@ from .data.create_dataset import create_full_dataset
 from .core.run_assignment import run_full_assignment
 from .output.create_output_file import write_output_text, remove_molecules_and_write_output
 from .analysis.best_fit_model import full_fit
-from .utils.astro_utils import initial_banner
+from .utils.astro_utils import initial_banner, save_parameters
 
 def assign_observations(
     config_path: Optional[str] = None,
@@ -37,6 +37,12 @@ def assign_observations(
     directory_path : str, optional
         Directory containing required database files and for output storage.
         Used if config_path not provided.
+    force_ignore_molecules : list of str, optional
+        List of molecule names to forcibly exclude from the assignment.
+        Format: ['CH3OH', 'H2CO']. Default: [] (empty list)
+    force_include_molecules : list of str, optional
+        List of molecule names to forcibly include in the assignment.
+        Format: ['CH3OH', 'H2CO']. Default: [] (empty list)
     **kwargs : dict
         Additional parameters:
         - temperature : float
@@ -66,6 +72,12 @@ def assign_observations(
             Continuum temperature in Kelvin. Default: 2.7
         - valid_atoms : list of str, optional
             List of atomic symbols that could be present. Default: ['C', 'O', 'H', 'N', 'S']
+        - known_molecules : list of str, optional
+            List of SMILES strings for molecules known to be present in the source.
+            Can include duplicates to require multiple copies (e.g., ['C=O', 'C=O'] 
+            ensures at least 2 copies of formaldehyde are maintained in the detected 
+            list throughout iteration). This influences structural relevance calculations.
+            Default: None (no known molecules)
     
     Returns
     -------
@@ -78,6 +90,7 @@ def assign_observations(
         - 'linewidth': Determined linewidth (km/s)
         - 'linewidth_freq': Linewidth in frequency units (MHz)
         - 'rms': RMS noise level (K)
+        - 'source_size': inputted source size (arcseconds)
         - 'execution_time': Total time taken (seconds)
         - 'removed_molecules': List of molecules removed during fitting
         - 'output_files': Paths to generated output files
@@ -125,6 +138,31 @@ def assign_observations(
     ...     continuum_temperature=2.7,
     ...     valid_atoms=['C', 'O', 'H', 'N', 'S'],
     ...     rms_noise=0.01
+    ... )
+    
+    With known molecules (count-based):
+    >>> results = astro_amase.assign_observations(
+    ...     spectrum_path='spectrum.txt',
+    ...     directory_path='./data/',
+    ...     temperature=150.0,
+    ...     sigma_threshold=5.0,
+    ...     observation_type='interferometric',
+    ...     beam_major_axis=0.5,
+    ...     beam_minor_axis=0.5,
+    ...     known_molecules=['C=O', 'C=O', 'CC(=O)O']  # 2x formaldehyde, 1x acetic acid
+    ... )
+    
+    With known molecules (count-based):
+    >>> results = astro_amase.assign_observations(
+    ...     spectrum_path='spectrum.txt',
+    ...     directory_path='./data/',
+    ...     temperature=150.0,
+    ...     vlsr=5.5,
+    ...     sigma_threshold=5.0,
+    ...     observation_type='interferometric',
+    ...     beam_major_axis=0.5,
+    ...     beam_minor_axis=0.5,
+    ...     known_molecules=['C=O', 'C=O', 'CC(=O)O']  # At least 2x formaldehyde, 1x acetic acid
     ... )
     """
     initial_banner()
@@ -231,7 +269,7 @@ def get_linewidth(
         bmin = beam_minor_axis
     
     # Load data
-    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation = load_data_original(
+    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth = load_data_original(
         spectrum_path, obs_type, bmaj_or_dish, bmin
     )
     
@@ -271,6 +309,7 @@ def get_source_parameters(
     rms_noise: Optional[float] = None,
     continuum_temperature: float = 2.7,
     dish_diameter: float = 100.0,
+    source_size: float = 1.E20,
     beam_major_axis: Optional[float] = None,
     beam_minor_axis: Optional[float] = None
 ) -> Dict[str, Any]:
@@ -386,7 +425,7 @@ def get_source_parameters(
     
     # Load data
     print("Loading spectrum...")
-    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation = load_data_original(
+    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth = load_data_original(
         spectrum_path, obs_type, bmaj_or_dish, bmin
     )
     
@@ -420,7 +459,7 @@ def get_source_parameters(
             vlsr_known, vlsr, temperature_is_exact, temperature,
             directory_path, freq_arr, int_arr, resolution,
             dv_mhz, data, consider_hyperfine, min_separation,
-            dv_kms, ll0, ul0, continuum_temperature, rms_noise
+            dv_kms, ll0, ul0, continuum_temperature, rms_noise, bandwidth, source_size
         )
         
         print(f"\nDetermined VLSR: {best_vlsr:.2f} km/s")
@@ -495,7 +534,12 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Atomic symbols to consider
         - rms_noise : float or None
             Manual RMS noise (K), None for automatic calculation
-    
+        - column_density_range: list
+            Column density bounds for fitting. 
+        - peak_df: str
+            Path to csv file that contains peak information (optional)
+        - peak_df_3sigma: str, optional
+            Path to csv file that contains 3 sigma peaks in data (optional)
     Returns
     -------
     results : dict
@@ -518,8 +562,12 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Linewidth in frequency units (MHz)
         - rms : float
             RMS noise level (K)
+        - source_size: float
+            Inputted source size (arcseconds)
         - execution_time : float
             Total time taken (seconds)
+        - _internal_data : dict
+            Internal data needed for recreating plots in notebooks
         - output_files : dict
             Paths to all generated output files
     
@@ -529,16 +577,20 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     timing for each major step. All output files are saved to the directory
     specified in user_outputs['directory_path'].
     """
+    
     initial_time = time.perf_counter()
     
     # Load observational data
     print("\n=== Loading Observational Data ===")
-    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation = load_data_original(
+    #specPath, observation_type, bmaj, bmin, rmsInp
+    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth, rms_original = load_data_original(
         user_outputs['spectrum_path'],
         user_outputs['observation_type'],
         user_outputs['bmaj_or_dish'],
-        user_outputs['bmin']
+        user_outputs['bmin'],
+        user_outputs['rms_noise'],
     )
+
     print("\n=== User-Inputted Parameters ===")
     print(f"Spectrum path: {user_outputs['spectrum_path']}")
     print(f"Directory path: {user_outputs['directory_path']}")
@@ -599,7 +651,11 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             consider_hyperfine, min_separation,
             dv_value, ll0, ul0,
             user_outputs['continuum_temperature'],
-            user_outputs['rms_noise']
+            #user_outputs['rms_noise'],
+            rms_original,
+            bandwidth,
+            user_outputs['source_size']
+
         )
     else:
         best_vlsr = user_outputs['vlsr_input']
@@ -622,7 +678,9 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         user_outputs['observation_type'],
         user_outputs['bmaj_or_dish'],
         user_outputs['bmin'],
-        user_outputs['rms_noise']
+        user_outputs['rms_noise'],
+        user_outputs['peak_df'],
+        user_outputs['peak_df_3sigma']
     )
     print(f"RMS noise: {peak_data['rms']:.2g} K")
     
@@ -638,7 +696,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         consider_hyperfine, best_temp,
         user_outputs['source_size'],
         ll0, ul0, freq_arr, resolution,
-        user_outputs['continuum_temperature']
+        user_outputs['continuum_temperature'],
+        user_outputs['force_ignore_molecules']
     )
     dataset_time = time.perf_counter()
     print(f'Dataset creation time: {round((dataset_time - param_time) / 60, 2)} minutes')
@@ -652,22 +711,24 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         user_outputs['valid_atoms'],
         dv_value_freq,
         peak_data['rms'],
-        peak_data['peak_freqs_full']
+        peak_data['peak_freqs_full'],
+        known_molecules=user_outputs.get('known_molecules', None)
     )
     assign_time = time.perf_counter()
     print(f'Line assignment time: {round((assign_time - dataset_time) / 60, 2)} minutes')
     
     # Perform best-fit model
     print("\n=== Fitting Best-Fit Model ===")
-    delMols, column_density_df, assignment_df = full_fit(
+    delMols, column_density_df, assignment_df, internal_data = full_fit(
         user_outputs['directory_path'],
         assigner, peak_data['data'],
-        best_temp, dv_value,
+        best_temp, dv_value, dv_value_freq,
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range']
     )
+
     fit_time = time.perf_counter()
     print(f'Best-fit model time: {round((fit_time - assign_time) / 60, 2)} minutes')
     
@@ -700,6 +761,9 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         'linewidth': float(dv_value),
         'linewidth_freq': float(dv_value_freq),
         'rms': float(peak_data['rms']),
+        'resolution': float(resolution),
+        'source_size': float(user_outputs['source_size']),
+        '_internal_data': internal_data,
         'execution_time': total_time,
         'output_files': {
             'interactive_plot': os.path.join(user_outputs['directory_path'], 'fit_spectrum.html'),
@@ -708,7 +772,12 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             'column_densities': os.path.join(user_outputs['directory_path'], 'column_density_results.csv')
         }
     }
+
+    print('saving parameters')
+    print(user_outputs['directory_path'])
+    save_parameters(user_outputs, results, user_outputs['directory_path'])
     
+
     return results
 
 
@@ -754,7 +823,27 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             Atomic symbols. Default: ['C', 'O', 'H', 'N', 'S']
         - rms_noise : float, optional
             Manual RMS noise (K). Default: None (auto-calculate)
-    
+        - known_molecules : list of str, optional
+            SMILES strings for known molecules. Can include duplicates to 
+            require multiple copies. Default: None (no known molecules)
+        - known_molecules : list of str, optional
+            List of SMILES strings for known molecules. Can include duplicates
+            for count-based requirements. Default: None
+        - column_density_range: list or floats, optional
+            Minimum and maximum column density bounds for fitting.
+            Format is [min, max]. Default: [1.e10, 1.e20]
+        - peak_df: str, optional
+            Path to csv file that contains peak information 
+            Used if the user wants to input peak frequencies/intensities 
+            instead of having code determine them.
+            Must have a column titled 'frequency' and a column titled 'intensity'
+            Default: None
+        - peak_df_3sigma: str, optional
+            Path to csv file that contains 3 sigma peaks in data
+            Used for intensity analysis. Recommended to input if inputting optional
+            peak_df parameter as well. 
+            Must have a column titled 'frequency' and a column titled 'intensity'
+            Default: None
     Returns
     -------
     params : dict
@@ -819,6 +908,12 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'vlsr_input': vlsr_input,
         'vlsr_known': vlsr_known,
         'temperature_choice': temperature_choice,
+        'force_ignore_molecules': kwargs.get('force_ignore_molecules', []),
+        'force_include_molecules': kwargs.get('force_include_molecules', []),
+        'known_molecules': kwargs.get('known_molecules', None),
+        'column_density_range': kwargs.get('column_density_range', [1.e10, 1.e20]),
+        'peak_df':kwargs.get('peak_df', None),
+        'peak_df_3sigma':kwargs.get('peak_df_3sigma',None),
     }
     
     # Handle beam parameters based on observation type

@@ -77,7 +77,7 @@ def runCalc(inputVectors, covParam, validation, span):
 
         mScoreList.append(float(iScore))
 
-    mScoreList2 = np.array(mScoreList) ** 3.5 #exaggerate differences between scores by raising them to the power of 3.5.
+    mScoreList2 = np.array(mScoreList) ** 3.7 #exaggerate differences between scores by raising them to the power of 3.7.
     #the more isolated each vector is, the higher its weight will be
     mScoreList = mScoreList2
     #storing information of each Gaussian as a tuple of (mean, covariance, isolation score) 
@@ -118,7 +118,7 @@ def runCalc(inputVectors, covParam, validation, span):
             current_result = compute_pdf(gpNew[v][0], gpNew[v][1], all_vectors, gpNew[v][2])
         random_scores += current_result
 
-    ranks = rankdata(random_scores, method='average')  # or 'ordinal', 'dense', etc.
+    ranks = rankdata(random_scores, method='average')  
 
     # Convert ranks to percentiles
     percentiles = (ranks - 1) / (len(random_scores) - 1)

@@ -216,9 +216,15 @@ class SpectralLine:
                         context: 'ScoringContext'):
         """Calculate dynamic scores for a single candidate."""
         # 1. Structural relevance score (changes with detected molecules)
+
         candidate.structural_score = context.calculate_structural_score(
             candidate.smiles
         )
+
+        #if candidate.smiles == '[C]=C=C=C=C=C':
+        #    print(candidate.smiles)
+        #    print(candidate.formula)
+        #    print(candidate.structural_score)
         
         # 2. Initial global score (uses pre-calculated frequency_match_score)
         candidate.global_score = candidate.structural_score * candidate.frequency_match_score
@@ -393,10 +399,33 @@ class ScoringContext:
     ignore_isotopologues: List[str] = field(default_factory=list)
     peak_freqs_full: np.ndarray = field(default_factory=lambda: np.array([]))
     
+    # Known molecules that must always be present in detected_smiles
+    known_molecules: List[str] = field(default_factory=list)
+    
     # Dynamic state (changes as algorithm progresses)
     detected_smiles: List[str] = field(default_factory=list)
     highest_intensities: Dict[str, float] = field(default_factory=dict)
     highest_smiles: Dict[str, float] = field(default_factory=dict)
+    
+    # Minimum required counts for each known molecule (computed from known_molecules)
+    _known_molecule_min_counts: Dict[str, int] = field(default_factory=dict, init=False, repr=False)
+    
+    def __post_init__(self):
+        """
+        Initialize detected_smiles with known molecules and compute minimum counts.
+        
+        The known_molecules list can contain duplicates, e.g.:
+        ['C=O', 'C=O', 'CC(=O)O'] means we need at least 2 copies of 'C=O'
+        and at least 1 copy of 'CC(=O)O' in detected_smiles at all times.
+        """
+        # Count how many times each molecule appears in known_molecules
+        from collections import Counter
+        counts = Counter(self.known_molecules)
+        self._known_molecule_min_counts = dict(counts)
+        
+        # Add known molecules to detected_smiles at initialization
+        # (includes all duplicates from the input list)
+        self.detected_smiles.extend(self.known_molecules)
     
     # Structural relevance data
     total_smiles: List[str] = field(default_factory=list)
@@ -415,6 +444,28 @@ class ScoringContext:
             return 0.0
         
         idx = self.total_smiles.index(smiles)
+        
+        # If we have detected molecules but no structural scores calculated yet,
+        # this means we need to calculate them for the first time
+        # This happens when known_molecules are provided
+        if len(self.structural_percentiles) == 0:
+            # We have detected molecules (from known_molecules) but haven't calculated
+            # structural scores yet - return default score
+            # The scores will be calculated on the first recalculation trigger
+            return 100.0
+        
+        # Safety check: ensure index is valid
+        if idx >= len(self.structural_percentiles):
+            raise IndexError(
+                f"Structural percentiles index out of range: "
+                f"trying to access index {idx} but structural_percentiles "
+                f"only has {len(self.structural_percentiles)} entries. "
+                f"SMILES: {smiles}, "
+                f"total_smiles has {len(self.total_smiles)} entries, "
+                f"detected_smiles has {len(self.detected_smiles)} entries "
+                f"({len(set(self.detected_smiles))} unique)"
+            )
+        
         return 100 * float(self.structural_percentiles[idx])
     
     def update_structural_scores(self, percentiles: List[float]):
@@ -464,6 +515,30 @@ class ScoringContext:
         if smiles not in self.highest_smiles:
             self.highest_smiles[smiles] = intensity
         '''
+    
+    def ensure_known_molecules_present(self):
+        """
+        Ensure each known molecule appears at least the minimum required number 
+        of times in detected_smiles.
+        
+        The minimum count for each molecule is determined by how many times it 
+        appeared in the original known_molecules list.
+        
+        Example:
+            If known_molecules = ['C=O', 'C=O', 'CC(=O)O'], then:
+            - 'C=O' must appear at least 2 times
+            - 'CC(=O)O' must appear at least 1 time
+        
+        This method adds missing copies as needed to meet the minimum counts.
+        """
+        for smiles, min_count in self._known_molecule_min_counts.items():
+            current_count = self.detected_smiles.count(smiles)
+            
+            if current_count < min_count:
+                # Add the missing copies
+                copies_to_add = min_count - current_count
+                for _ in range(copies_to_add):
+                    self.detected_smiles.append(smiles)
 
 
 class IterativeSpectrumAssignment:
@@ -557,11 +632,13 @@ class IterativeSpectrumAssignment:
         
         # Get embeddings for detected molecules (including duplicates for weighting)
         inp = []
+        detected_smiles_list = [] 
         #print('recalculating detected smiles')
         #print(self.context.detected_smiles)
         for smiles in self.context.detected_smiles:  # This list can have duplicates
             embed = vicgae_model.embed_smiles(smiles)
             inp.append(embed[0].numpy())
+            detected_smiles_list.append(smiles)
         
         # Get embeddings for all candidate molecules
         embed_vectors = []
@@ -570,15 +647,280 @@ class IterativeSpectrumAssignment:
             embed_vectors.append(embed[0].numpy())
         
         # Run calculation
-        _, percentiles, _ = runCalc(inp, covParam, embed_vectors, span)
+        _, percentiles, gaussian_params = runCalc(inp, covParam, embed_vectors, span)
+        '''
+        print("\n" + "="*80)
+        print("DETECTED MOLECULES - ISOLATION SCORES (mScore)")
+        print("="*80)
         
+        # Extract mScores from gaussian_params (they're the 3rd element of each tuple)
+        # Group by unique SMILES to show both individual and summed scores
+        smiles_mscores = {}
+        for i, (mean, cov, mscore) in enumerate(gaussian_params):
+            smiles = detected_smiles_list[i]
+            if smiles not in smiles_mscores:
+                smiles_mscores[smiles] = []
+            smiles_mscores[smiles].append(mscore)
+        
+        # Print individual entries (for duplicates)
+        print(f"\n{'SMILES':<40} {'Individual mScore':>20} {'Count':>10}")
+        print("-"*80)
+        for i, (mean, cov, mscore) in enumerate(gaussian_params):
+            smiles = detected_smiles_list[i]
+            print(f"{smiles:<40} {mscore:>20.4f} {smiles_mscores[smiles].count(mscore):>10}")
+        
+        # Print summary (unique molecules)
+        print(f"\n{'SMILES':<40} {'Total mScore':>20} {'Times Added':>15}")
+        print("-"*80)
+        for smiles, mscores in sorted(smiles_mscores.items(), key=lambda x: sum(x[1]), reverse=True):
+            total_mscore = sum(mscores)
+            count = len(mscores)
+            print(f"{smiles:<40} {total_mscore:>20.4f} {count:>15}")
+        
+        print("="*80 + "\n")
+        '''
+        # Extract percentiles for validation vectors (candidate molecules)
+        # runCalc returns percentiles for: [random samples (7000*N), validation vectors]
+        # We want only the validation vectors part
         num_val = len(embed_vectors)
+        
+        # Safety check: ensure percentiles array is long enough
+        if len(percentiles) < num_val:
+            raise ValueError(
+                f"Percentiles array too short: got {len(percentiles)}, "
+                f"expected at least {num_val} (for {len(self.context.total_smiles)} candidates)"
+            )
+        
         val_percentiles = percentiles[-num_val:]
+        
+        # Verify we have the right number of percentiles
+        if len(val_percentiles) != len(self.context.total_smiles):
+            raise ValueError(
+                f"Percentiles mismatch: got {len(val_percentiles)} percentiles "
+                f"but have {len(self.context.total_smiles)} candidate molecules"
+            )
         
         # Update context
         self.context.update_structural_scores(val_percentiles)
         self._molecules_since_last_calc = 0
     
+    def generate_unassigned_analysis(self, output_file='unassigned_molecules_analysis.txt'):
+        """
+        Generate a report showing only lines that:
+        - Have candidates with structural score 0.5+ lower than assigned molecule, OR
+        - Have candidates that were NEVER assigned to ANY line AND have structural < 99.5, OR
+        - Are UNIDENTIFIED with clean unassigned candidates that have structural relevance < 99.5
+        
+        Highlights:
+        - Molecules that were NEVER assigned to ANY line (only if structural < 99.5)
+        - Cases where unassigned molecule has structural score 0.5+ lower than assigned molecule
+        
+        Args:
+            output_file: Path to output file
+        """
+        with open(output_file, 'w') as f:
+            f.write("="*100 + "\n")
+            f.write("FILTERED CLEAN UNASSIGNED CANDIDATES ANALYSIS\n")
+            f.write("="*100 + "\n\n")
+            f.write("Only showing lines that:\n")
+            f.write("  - Have candidates with structural score 0.5+ lower than assigned molecule, OR\n")
+            f.write("  - Have candidates NEVER assigned to ANY line with structural < 99.5, OR\n")
+            f.write("  - Are UNIDENTIFIED with clean candidates having structural relevance < 99.5\n\n")
+            f.write("SPECIAL HIGHLIGHTS:\n")
+            f.write("  *** = Molecule NEVER assigned to ANY line in the dataset\n")
+            f.write("  !!! = Structural score 0.5+ lower than assigned molecule\n\n")
+            
+            total_clean_unassigned = 0
+            lines_printed = 0
+            
+            # First pass: identify molecules that were NEVER assigned to ANY line
+            never_assigned_molecules = set()
+            
+            for line in self.lines:
+                for candidate in line.candidates:
+                    key = (candidate.smiles, candidate.formula)
+                    if key not in never_assigned_molecules:
+                        # Check if this molecule was ever assigned to any line
+                        was_ever_assigned = False
+                        for check_line in self.lines:
+                            if check_line.assigned_smiles == candidate.smiles:
+                                was_ever_assigned = True
+                                break
+                        
+                        if not was_ever_assigned:
+                            never_assigned_molecules.add(key)
+            
+            # Loop through every line
+            for line in self.lines:
+                clean_unassigned_on_this_line = []
+                highlighted_candidates = []
+                
+                # Loop through every candidate on this line
+                for candidate in line.candidates:
+                    # Check if this candidate has intensity problems or invalid atoms
+                    has_problems = (
+                        candidate.rule_out_strong_lines or
+                        candidate.has_relative_intensity_mismatch or
+                        candidate.has_unreasonably_strong_lines or
+                        candidate.is_isotopologue_too_strong or
+                        candidate.has_invalid_atoms
+                    )
+                    
+                    # Check if this candidate was NOT assigned to this line
+                    is_not_assigned_here = (line.assigned_smiles != candidate.smiles)
+                    
+                    # If no problems AND not assigned to this line, include it
+                    if not has_problems and is_not_assigned_here:
+                        clean_unassigned_on_this_line.append(candidate)
+                        
+                        # Check if this candidate should be highlighted
+                        should_highlight = False
+                        
+                        # Check if never assigned to any line AND structural < 99.5
+                        if ((candidate.smiles, candidate.formula) in never_assigned_molecules and 
+                            candidate.structural_score < 99.5):
+                            should_highlight = True
+                        
+                        # Check structural score difference if line is assigned
+                        if line.assignment_status == AssignmentStatus.ASSIGNED and line.best_candidate:
+                            struct_diff = line.best_candidate.structural_score - candidate.structural_score
+                            if struct_diff > 0.5:
+                                should_highlight = True
+                        
+                        # For multiple carriers, check against all top candidates
+                        elif line.assignment_status == AssignmentStatus.MULTIPLE_CARRIERS and line.top_candidates:
+                            for top_cand in line.top_candidates:
+                                struct_diff = top_cand.structural_score - candidate.structural_score
+                                if struct_diff > 0.5:
+                                    should_highlight = True
+                                    break
+                        
+                        if should_highlight:
+                            highlighted_candidates.append(candidate)
+                
+                # Determine if we should print this line
+                should_print_line = False
+                
+                # Case 1: Has highlighted candidates
+                if len(highlighted_candidates) > 0:
+                    should_print_line = True
+                
+                # Case 2: Unidentified with clean candidates having structural < 99.5
+                elif line.assignment_status == AssignmentStatus.UNIDENTIFIED and len(clean_unassigned_on_this_line) > 0:
+                    # Check if any clean candidate has structural relevance < 99.5
+                    for candidate in clean_unassigned_on_this_line:
+                        if candidate.structural_score < 99.5:
+                            should_print_line = True
+                            break
+                
+                if should_print_line:
+                    lines_printed += 1
+                    f.write("\n" + "="*100 + "\n")
+                    f.write(f"LINE {line.line_index} (Frequency: {line.frequency:.4f} MHz, Intensity: {line.intensity:.4f})\n")
+                    f.write("="*100 + "\n")
+                    
+                    # Print all clean unassigned candidates
+                    f.write(f"\nClean unassigned candidates ({len(clean_unassigned_on_this_line)}):\n")
+                    f.write("-"*100 + "\n")
+                    
+                    for candidate in clean_unassigned_on_this_line:
+                        # Check for highlighting conditions
+                        never_assigned_flag = ""
+                        struct_diff_flag = ""
+                        
+                        # Check if never assigned to any line (only show flag if structural < 99.5)
+                        if ((candidate.smiles, candidate.formula) in never_assigned_molecules and 
+                            candidate.structural_score < 99.5):
+                            never_assigned_flag = " *** NEVER ASSIGNED TO ANY LINE ***"
+                        
+                        # Check structural score difference if line is assigned
+                        if line.assignment_status == AssignmentStatus.ASSIGNED and line.best_candidate:
+                            struct_diff = line.best_candidate.structural_score - candidate.structural_score
+                            if struct_diff > 0.5:
+                                struct_diff_flag = f" !!! STRUCTURAL SCORE {struct_diff:.2f} LOWER THAN ASSIGNED !!!"
+                        
+                        # For multiple carriers, check against all top candidates
+                        elif line.assignment_status == AssignmentStatus.MULTIPLE_CARRIERS and line.top_candidates:
+                            max_struct_diff = 0
+                            for top_cand in line.top_candidates:
+                                struct_diff = top_cand.structural_score - candidate.structural_score
+                                if struct_diff > max_struct_diff:
+                                    max_struct_diff = struct_diff
+                            
+                            if max_struct_diff > 0.5:
+                                struct_diff_flag = f" !!! STRUCTURAL SCORE UP TO {max_struct_diff:.2f} LOWER THAN CARRIERS !!!"
+                        
+                        f.write(f"\n  Molecule: {candidate.formula}{never_assigned_flag}{struct_diff_flag}\n")
+                        f.write(f"  SMILES: {candidate.smiles}\n")
+                        f.write(f"    Frequency match score: {candidate.frequency_match_score:.4f}\n")
+                        f.write(f"    Structural relevance:  {candidate.structural_score:.4f}\n")
+                        if candidate.penalties:
+                            f.write(f"    Penalties: {', '.join(candidate.penalties)}\n")
+                        f.write("\n")
+                    
+                    total_clean_unassigned += len(clean_unassigned_on_this_line)
+                    
+                    # Print what was actually assigned to this line
+                    f.write("-"*100 + "\n")
+                    if line.assignment_status == AssignmentStatus.ASSIGNED and line.best_candidate:
+                        f.write(f"\nAssigned to this line:\n")
+                        f.write(f"  Molecule: {line.best_candidate.formula}\n")
+                        f.write(f"  SMILES: {line.best_candidate.smiles}\n")
+                        f.write(f"    Frequency match score: {line.best_candidate.frequency_match_score:.4f}\n")
+                        f.write(f"    Structural relevance:  {line.best_candidate.structural_score:.4f}\n")
+                        if line.best_candidate.penalties:
+                            f.write(f"    Penalties: {', '.join(line.best_candidate.penalties)}\n")
+                    
+                    elif line.assignment_status == AssignmentStatus.MULTIPLE_CARRIERS:
+                        f.write(f"\nLine marked as MULTIPLE_CARRIERS\n")
+                        f.write(f"All carrier species ({len(line.top_candidates)}):\n\n")
+                        
+                        for i, carrier in enumerate(line.top_candidates, 1):
+                            f.write(f"  Carrier {i}: {carrier.formula}\n")
+                            f.write(f"  SMILES: {carrier.smiles}\n")
+                            f.write(f"    Frequency match score: {carrier.frequency_match_score:.4f}\n")
+                            f.write(f"    Structural relevance:  {carrier.structural_score:.4f}\n")
+                            if carrier.penalties:
+                                f.write(f"    Penalties: {', '.join(carrier.penalties)}\n")
+                            f.write("\n")
+                    
+                    elif line.assignment_status == AssignmentStatus.UNIDENTIFIED:
+                        f.write(f"\nLine is UNIDENTIFIED (no molecule assigned)\n")
+                    
+                    else:
+                        f.write(f"\nLine status: unknown\n")
+                    
+                    f.write("\n")
+            
+            # Summary at the end
+            f.write("\n" + "="*100 + "\n")
+            f.write("SUMMARY\n")
+            f.write("="*100 + "\n")
+            f.write(f"Lines printed: {lines_printed}\n")
+            f.write(f"Total clean unassigned candidates shown: {total_clean_unassigned}\n")
+            
+            # List molecules never assigned with structural < 99.5
+            never_assigned_low_struct = []
+            for smiles, formula in never_assigned_molecules:
+                # Find structural score for this molecule
+                for line in self.lines:
+                    for candidate in line.candidates:
+                        if candidate.smiles == smiles and candidate.structural_score < 99.5:
+                            never_assigned_low_struct.append((smiles, formula, candidate.structural_score))
+                            break
+                    if any(s == smiles for s, f, _ in never_assigned_low_struct):
+                        break
+            
+            f.write(f"Molecules never assigned with structural < 99.5: {len(never_assigned_low_struct)}\n\n")
+            
+            # List molecules never assigned
+            if never_assigned_low_struct:
+                f.write("Molecules never assigned to any line (with structural < 99.5):\n")
+                for smiles, formula, struct_score in sorted(never_assigned_low_struct, key=lambda x: x[2]):
+                    f.write(f"  - {formula} ({smiles}): Structural = {struct_score:.2f}\n")
+        
+        print(f"\nFiltered clean unassigned candidates analysis saved to: {output_file}")
+                    
     def score_and_assign_line(self, line_index: int) -> Tuple[bool, bool]:
         """
         Score and assign a single line.
@@ -596,7 +938,37 @@ class IterativeSpectrumAssignment:
         
         # Calculate softmax and combined scores
         line.calculate_softmax_and_combined()
-        
+
+        structural_scores = [c.structural_score for c in line.candidates]
+        cans = [c.formula for c in line.candidates]
+        '''
+        if structural_scores:
+            avg_structural = np.mean(structural_scores)
+            print(f"\nLine {line_index} (freq={line.frequency:.4f} MHz):")
+            print(f"  Average structural score: {avg_structural:.4f}")
+            print(f"  Candidates with structural scores: {len(structural_scores)}/{len(line.candidates)}")
+            printList = [(structural_scores[i],cans[i]) for i in range(len(structural_scores))]
+            print(printList)
+
+            c6h2_candidates = [c for c in line.candidates if c.formula == 'l-C6H2']
+            if c6h2_candidates:
+                print("\n" + "="*60)
+                print(f"  *** C6H2 FOUND IN LINE {line_index} ***")
+                print("="*60)
+                for c6h2 in c6h2_candidates:
+                    print(f"  Formula: {c6h2.formula}")
+                    print(f"  SMILES: {c6h2.smiles}")
+                    print(f"  Structural score: {c6h2.structural_score:.4f}")
+                    print(f"  Global score: {c6h2.global_score:.2f}")
+                    print(f"  Combined score: {c6h2.combined_score:.4f}")
+                    print(f"  Softmax score: {c6h2.softmax_score:.4f}")
+                    print(f"  Passes threshold: {c6h2.passes_global_threshold}")
+                    if c6h2.penalties:
+                        print(f"  Penalties: {', '.join(c6h2.penalties)}")
+                    print("-"*60)
+                print()
+
+        '''
         # Assign (uses original 93.5 threshold)
         line.assign(self.context.local_threshold)
         
@@ -735,6 +1107,13 @@ class IterativeSpectrumAssignment:
         
         # Perform static checks once
         self.perform_all_static_checks()
+        
+        # If we have known molecules, calculate initial structural scores
+        # This ensures structural relevance is considered from the very first line
+        if len(self.context.detected_smiles) > 0 and len(self.context.structural_percentiles) == 0:
+            print(f"Calculating initial structural scores based on {len(self.context.detected_smiles)} known molecules "
+                  f"({len(set(self.context.detected_smiles))} unique)...")
+            self.recalculate_structural_scores()
     
         print("Starting iterative line assignment...")
         printProgressBar(0, len(self.lines), prefix='Progress:', 
@@ -809,6 +1188,9 @@ class IterativeSpectrumAssignment:
                 
                 # Handle override molecules with multiple additions
                 self._handle_override_in_main_loop(old_detected)
+                
+                # Ensure known molecules remain present after rescoring
+                self.context.ensure_known_molecules_present()
             
             # Update override counter for tracking (always do this)
             override_mols = self.lines[i].get_override_candidates()
@@ -822,7 +1204,8 @@ class IterativeSpectrumAssignment:
             # Update progress
             printProgressBar(i + 1, len(self.lines), prefix='Progress:', 
                            suffix='Complete', length=50)
-        
+            #print('updated detected')
+            #print(self.context.detected_smiles)
         print("\nPerforming final convergence check...")
         self._final_convergence()
     
@@ -895,6 +1278,9 @@ class IterativeSpectrumAssignment:
                                 line.intensity
                             )
             
+            # Ensure known molecules are always present after rebuilding
+            self.context.ensure_known_molecules_present()
+            
             # Check for override molecules
             override_mols = self._check_overrides_without_adding(min_occurrences=2)
             #print('override mols')
@@ -961,6 +1347,10 @@ class IterativeSpectrumAssignment:
                 co = self.context.detected_smiles.count(m)
                 if co > 1:
                     minNeededFinal[m] = co
+            
+            # Ensure known molecules are always present before checking convergence
+            self.context.ensure_known_molecules_present()
+            
             #print('min needed')
             #print(minNeededFinal)    
             # Check convergence: detected list is stable AND no override molecules

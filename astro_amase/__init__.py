@@ -26,15 +26,28 @@ from .constants import (
     global_thresh
 )
 
+from .utils.plotting import show_fit_in_notebook, plot_from_saved, get_individual_plots
+from .utils.astro_utils import find_peaks_local
+from .utils.molsim_utils import load_obs, find_limits, get_rms
+from .core.molecule_prediction import molecule_prediction
+
 __all__ = [
     '__version__',
     'assign_observations',
     'run_pipeline',
     'get_linewidth',
     'get_source_parameters',
+    'show_fit_in_notebook',
+    'plot_from_saved',
+    'get_individual_plots'
     'DEFAULT_VALID_ATOMS',
     'ALL_VALID_ATOMS',
     'ckm',
     'c',
-    'global_thresh'
+    'global_thresh',
+    'find_peaks_local',
+    'get_rms',
+    'load_obs',
+    'find_limits',
+    'molecule_prediction'
 ]

@@ -35,6 +35,7 @@ setup(
     install_requires=[
         "pandas>=1.3.0",
         "numpy>=1.20.0",
+        "torch>=1.10.0",
         "rdkit>=2021.09.1",
         "scipy>=1.7.0",
         "bokeh>=2.4.0",
@@ -43,6 +44,7 @@ setup(
         "matplotlib>=3.4.0",
         "pyyaml>=5.4.0",
         "astrochem_embedding>=0.1.0",
+        "group-selfies @ git+https://github.com/aspuru-guzik-group/group-selfies.git",
     ],
     extras_require={
         "dev": [

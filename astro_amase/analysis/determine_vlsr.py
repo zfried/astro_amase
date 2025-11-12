@@ -77,6 +77,87 @@ def top_k_densest_windows(data, window_radius, top_k):
 
     return results[:top_k]
 
+def check_5sigma(spectrum_frequencies, spectrum_intensities, 
+                      target_frequencies, tolerance, min_intensity):
+    """
+    Check if spectrum contains intensities above threshold within tolerance of target frequencies.
+    
+    Parameters:
+    -----------
+    spectrum_frequencies : array-like
+        Frequencies from your spectrum
+    spectrum_intensities : array-like
+        Corresponding intensities from your spectrum
+    target_frequencies : array-like
+        Frequencies you want to check for
+    tolerance : float
+        Plus/minus range around target frequency (e.g., 0.5 for ±0.5)
+    min_intensity : float
+        Minimum intensity threshold
+    
+    Returns:
+    --------
+     count : int
+        Number of peaks with a nearby three sigma feature in spectrum.
+    count/len(target_frequencies) : float
+        Percentage of target frequencies with nearby 3 sigma feature
+    """
+
+    count = 0
+    for target_freq in target_frequencies:
+        # Find indices where spectrum frequencies are within tolerance
+        freq_mask = np.abs(spectrum_frequencies - target_freq) <= tolerance
+        
+        # Find indices where intensities are above threshold
+        intensity_mask = spectrum_intensities >= min_intensity
+        
+        # Combine both conditions
+        match_mask = freq_mask & intensity_mask
+        if np.any(match_mask):  # Check if ANY element is True
+            count += 1
+
+        
+   
+    return count, count/len(target_frequencies)
+
+
+
+def top_k_densest_windows_next(data, window_radius, top_k):
+    """
+    Finds the top_k windows (intervals) of length 2*window_radius
+    that contain the most data points in a 1D dataset.
+    
+    Args:
+        data: iterable of numeric values
+        window_radius: half-width of each window
+        top_k: number of densest windows to return
+
+    Returns:
+        List of tuples (count, lower_bound, upper_bound) for the top_k densest windows
+    """
+    data = np.sort(np.array(data))
+    seen_ranges = set()
+    results = []
+
+    for i in range(len(data)):
+        center = data[i]
+        lower = center - window_radius
+        upper = center + window_radius
+
+        # Round for deduplication stability (avoid near-identical floats)
+        key = (round(lower, 6), round(upper, 6))
+        if key in seen_ranges:
+            continue
+        seen_ranges.add(key)
+
+        count = np.searchsorted(data, upper, side='right') - np.searchsorted(data, lower, side='left')
+        results.append((count, lower, upper))
+
+    # Sort by count descending
+    results.sort(reverse=True)
+
+    return results[:top_k]
+
 def calc_needed_vlsr(v_measured, v_rest):
     """
     Calculate the required VLSR (Local Standard of Rest velocity) to align an observed (measured) frequency
@@ -103,7 +184,7 @@ def calc_needed_vlsr(v_measured, v_rest):
     vlsr = ckm * (v_rest - v_measured) / v_rest
     return vlsr
 
-def simulate_sum(params, mol_list, dv_value, ll0, ul0, data, cont_obj):
+def simulate_sum(params, mol_list, dv_value, ll0, ul0, data, cont_obj, source_size):
     """
     Simulates and sums spectral profiles for a list of molecules using provided parameters.
     Parameters
@@ -135,7 +216,7 @@ def simulate_sum(params, mol_list, dv_value, ll0, ul0, data, cont_obj):
         src = Source(
             Tex=temp_fit,
             column=col,
-            size=1.E20,
+            size=source_size,
             dV=dv_value,                # Keep dv_value fixed
             velocity=vlsr_value_fit,
             continuum=cont_obj
@@ -154,7 +235,7 @@ def simulate_sum(params, mol_list, dv_value, ll0, ul0, data, cont_obj):
 
     return total_sim
 
-def residuals(params, mol_list, y_exp, dv_value, ll0, ul0, data, cont_obj):
+def residuals(params, mol_list, y_exp, dv_value, ll0, ul0, data, cont_obj, source_size):
     """
     Calculate the residuals between simulated and experimental data for a given set of parameters and molecular list.
     Args:
@@ -163,7 +244,7 @@ def residuals(params, mol_list, y_exp, dv_value, ll0, ul0, data, cont_obj):
     Returns:
         numpy.ndarray: The difference between the simulated data and the experimental data (y_sim - y_exp).
     """
-    y_sim = simulate_sum(params, mol_list, dv_value, ll0, ul0, data, cont_obj)
+    y_sim = simulate_sum(params, mol_list, dv_value, ll0, ul0, data, cont_obj, source_size)
     return y_sim - y_exp
 
 def simulate_sum_knowTemp(params, mol_list, dv_value, ll0, ul0, data, tempInput, cont_obj):
@@ -229,7 +310,7 @@ def residuals_knowTemp(params, mol_list, y_exp, dv_value, ll0, ul0, data, tempIn
     y_sim = simulate_sum_knowTemp(params, mol_list, dv_value, ll0, ul0, data, tempInput, cont_obj)
     return y_sim - y_exp
 
-def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, int_arr, resolution, dv_value_freq, data, consider_hyperfine, min_separation, dv_value,ll0,ul0, cont_temp, rmsInp):
+def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, int_arr, resolution, dv_value_freq, data, consider_hyperfine, min_separation, dv_value,ll0,ul0, cont_temp, rms_original, bandwidth, source_size):
     """
     Determine source velocity (VLSR) and excitation temperature through spectral fitting of common molecules.
     
@@ -288,6 +369,8 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
         Continuum temperature (K) for background radiation field.
     rmsInp : float
         RMS noise level for peak detection significance threshold.
+    source_size: float
+        Inputted source size (arcseconds)
     
     Returns
     -------
@@ -342,18 +425,26 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
     Notes
     -----
     - The 250 km/s search window accommodates most galactic sources
-    - Line strength threshold (-4.7) empirically determined for robust detection
+    - Line strength threshold empirically determined to avoid weak lines
     - Temperature bounds prevent unphysical values while allowing flexibility
     - Works best with spectra containing several strong common molecules (CO, CS, etc.)
     """
     
     
+
     if vlsr_choice == False:
+        #print('BANDWIDTH!!!',bandwidth)
         #dictionary that links isotoplogues to their parent molecules
         parentDict = {'13CS, v = 0, 1': [('CS, v = 0 - 4', 44501)], 'CH318OH, vt le 2': [('CH3OH, vt = 0 - 2', 32504)], 'HDCO': [('H2CO', 30501)], 'H2C18O': [('H2CO', 30501)], 'N18O': [('NO, v = 0', 30517)], 'H213CO': [('H2CO', 30501)], 'H2C17O': [('H2CO', 30501)], '13CH3OH, vt = 0, 1': [('CH3OH, vt = 0 - 2', 32504)], 'CH2DCN': [('CH3CN, v = 0', 41505)], 'HDS': [('H2S', 34502)], '15NH3': [('NH3, v = 0', 17506)], 'DC3N, v = 0': [('HC3N, (0,0,0,0)', 51501)], 'H13CCCN, v = 0': [('HC3N, (0,0,0,0)', 51501)], 'HC13CCN, v = 0': [('HC3N, (0,0,0,0)', 51501)], 'HCC13CN, v = 0': [('HC3N, (0,0,0,0)', 51501)], 'S18O': [('SO, v = 0', 48501)], '18OCS': [('OCS, v = 0', 60503)], 'OC34S': [('OCS, v = 0', 60503)], 'O13CS': [('OCS, v = 0', 60503)], '34SO': [('SO, v = 0', 48501)], 'c-13CC2H2': [('c-C3H2', 38508)], 'c-CC13CH2': [('c-C3H2', 38508)], '13CH3CN, v = 0': [('CH3CN, v = 0', 41505)], 'CH313CN, v = 0': [('CH3CN, v = 0', 41505)], 'H234S': [('H2S', 34502)], 'C34S, v = 0, 1': [('CS, v = 0 - 4', 44501)], 'DCO+': [('HCO+, v = 0', 29507)], 'DCN, v = 0': [('HCN, v = 0', 27501)], 'H13CN, v = 0': [('HCN, v = 0', 27501)], 'H13CO+': [('HCO+, v = 0', 29507)], 'D2S': [('H2S', 34502), ('HDS', 35502)], 'C18O': [('CO, v = 0', 28503)], '13CO': [('CO, v = 0', 28503)]}
-        
-        print('Determining VLSR now!')
+        igMols = ['SO, a 1Î\x94, v = 0, 1', 'c-C3H2', 'c-CC13CH2','c-13CC2H2', 'c-C3HD'] #list of molecules to filter out due to quality control, 'c-CC13CH2','c-13CC2H2', 'c-C3H2', 'c-C3HD'
+        #if bandwidth <= 4000: #include methyl formate if broadband
+        #    igMols.append('CH3OCHO')
 
+        #print('IGNORE MOLS')
+        #print(igMols)
+        print('Determining VLSR now!')
+        #mask_threshold = 5*rmsInp
+        mask_threshold = 5*rms_original
         #uploading database of all transitions of molecules that are considered for VLSR determiation
         with gzip.open(os.path.join(direc,"vlsr_database_logint.pkl.gz"), "rb") as f: 
             database_freqs, database_errs, database_tags, database_lists, database_smiles, database_names, database_isos, database_vibs, database_forms, database_logints = pickle.load(f)
@@ -371,7 +462,7 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
         for sig in sigList:
             #print(sig)
             if foundSig == False:
-                peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sig, local_rms=False, rms=rmsInp)
+                peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sig, local_rms=False, rms=rms_original)
                 if len(peak_indices) >= 150: #find sigma value that has at least 150 peaks
                     foundSig = True
 
@@ -405,15 +496,20 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
                                 #allNames.append(pa)
                 
                 #consider_hyperfine = False
-                #only consider strong lines with logint in .cat file > -4.7 (determined through some testing)
+                #only consider strong lines with logint in .cat file > -5.1 (determined through some testing)
                 #print(match_tu)
                 if consider_hyperfine == True:
-                    if match_tu[-1] > -4.7:
+                    if match_tu[-1] > -5.1:
                         line_mols.append(match_tu)
                 else:
                     if match_tu[6] < 200000:  # Exclude hyperfine lines
-                        if 'SO, a 1Î\x94, v = 0, 1' not in match_tu[0] and 'c-C3H2' not in match_tu[0]: #'CH3OCHO' not in match_tu[0] and 
-                            if match_tu[-1] > -4.7:
+                        #if 'SO, a 1Î\x94, v = 0, 1' not in match_tu[0] and 'c-C3H2' not in match_tu[0] and 'CH3OCHO' not in match_tu[0] and 'c-CC13CH2' not in match_tu[0]: #'CH3OCHO' not in match_tu[0] and 
+                        rule_out_var = False
+                        for igm in igMols: #excluding problematic molecules for quality control
+                            if igm in match_tu[0]:
+                                rule_out_var = True
+                        if rule_out_var == False:
+                            if match_tu[-1] > -5.1 and match_tu not in line_mols:
                                 line_mols.append(match_tu)
 
             allCans.append(line_mols) #store all candidates for each peak frequency within 250 km/s
@@ -433,7 +529,7 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
                 #print(vlsr_needed)
                 mol = molDict[(can[0], can[-3])]
                 cont_obj = Continuum(type='thermal', params=cont_temp)
-                src = Source(size=1.E20, dV=dv_value, velocity=vlsr_needed, Tex=tempInput, column=1.E11, continuum=cont_obj)
+                src = Source(size=source_size, dV=dv_value, velocity=vlsr_needed, Tex=tempInput, column=1.E11, continuum=cont_obj)
                 #simulate the spectrum for the candidate molecule at the needed vlsr
                 sim = Simulation(
                     mol=mol,
@@ -472,31 +568,135 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
                     scaleVal = sorted_peak_ints[i]/closestInt #scaling factor for the simulated peak intensity to match the observed peak intensity
                     scaled_peak_ints = sim_peak_ints * scaleVal #scaling all simulated peak intensities
                     hasTooStrong = False
-                    if max(scaled_peak_ints) > 15*max(sorted_peak_ints): #checking if any scaled peak intensity is too strong (> 15 times the maximum peak intensity of the observed spectrum)
+                    if max(scaled_peak_ints) > 10*max(sorted_peak_ints): #checking if any scaled peak intensity is too strong (> 15 times the maximum peak intensity of the observed spectrum)
+                        hasTooStrong = True
+                    if abs(closestFreq-sorted_peak_freqs[i]) >= 0.5*dv_value_freq:
                         hasTooStrong = True
                     #if the closest peak frequency is within 0.5*dv_value_freq of the observed peak frequency and no scaled peak intensity is too strong
                     # add the candidate to the filtered candidates list
-                    if abs(closestFreq-sorted_peak_freqs[i]) <= 0.5*dv_value_freq and hasTooStrong == False: 
+                    if bandwidth >= 15000 and abs(closestFreq-sorted_peak_freqs[i]) <= 0.5*dv_value_freq and hasTooStrong == False:
                         allCansFiltered.append((can,vlsr_needed,closestFreq))
+                    elif bandwidth < 15000 and hasTooStrong == False:
+                        #for low bandwidth cases, be more careful and check whether the 5 sigma lines of the molecule are present.
+                        mask = scaled_peak_ints > mask_threshold
+                        sim_peak_freqs_filtered = sim_peak_freqs[mask]
+                        sim_peak_ints_filtered = scaled_peak_ints[mask]
+                        mask = sim_peak_freqs_filtered != closestFreq
+                        sim_peak_freqs_final = sim_peak_freqs_filtered[mask]
+                        sim_peak_ints_final = sim_peak_ints_filtered[mask]
+                        if len(sim_peak_freqs_final):
+                            numMatch, percentMatch = check_5sigma(freq_arr, int_arr, sim_peak_freqs_final, 0.5*dv_value_freq, 3*rms_original)
+                            #if abs(vlsr_needed-0) < 4:
+                                #print(can, percentMatch)
+                            if percentMatch >= 0.25:
+                                rule_out_iso = False
+                                if can[0] in parentDict:
+                                    #print('parent found for ' + str(can[0]))
+                                    for pa in parentDict[can[0]]:
+                                        #print(pa)
+                                        par_mol = molDict[(pa[0], 'CDMS')]
+                                        par_src = Source(size=source_size, dV=dv_value, velocity=vlsr_needed, Tex=tempInput, column=scaleVal*1.E11, continuum=cont_obj)
+                                        sim = Simulation(
+                                            mol=par_mol,
+                                            ll=ll0,
+                                            ul=ul0,
+                                            observation=data,
+                                            source=par_src,
+                                            line_profile='Gaussian',
+                                            use_obs=True)
+                                        if len(sim.spectrum.freq_profile) > 0:
+                                            sim_peak_indices = find_peaks(
+                                                sim.spectrum.freq_profile, sim.spectrum.int_profile,
+                                                res=resolution,
+                                                min_sep=min_separation,
+                                                is_sim=True
+                                            )
+
+                                            #finding if there are strong peaks of the main isotopologue in the frequency range                
+                                            if len(sim_peak_indices) > 0:
+                                                sim_peak_freqs = sim.spectrum.freq_profile[sim_peak_indices]
+                                                sim_peak_ints = np.abs(sim.spectrum.int_profile[sim_peak_indices])
+                                                mask = sim_peak_ints > mask_threshold
+                                                sim_peak_freqs_filtered = sim_peak_freqs[mask]
+                                                sim_peak_ints_filtered = sim_peak_ints[mask]
+                                                #tolVal = 0.5*dv_value_freq
+
+                                                if len(sim_peak_freqs_filtered):
+                                                    numMatch, percentMatch = check_5sigma(freq_arr, int_arr, sim_peak_freqs_filtered, 0.5*dv_value_freq, 3*rms_original)
+                                                    #print(percentMatch)
+                                                    if percentMatch < 0.3:
+                                                        rule_out_iso = True
+                                                    #print(rule_out_iso)
+
+
+                                if rule_out_iso == False:
+                                    allCansFiltered.append((can,vlsr_needed,closestFreq))
+
+
+                                #allCansFiltered.append((can,vlsr_needed,closestFreq))
+                        else:
+                            allCansFiltered.append((can,vlsr_needed,closestFreq))
+
+
+
+
+
 
         
 
+        #print('DV VALUE')
+        #print(dv_value)
         total_vlsrs = []
         #storing the vlsrs of all filtered candidates
         for i in allCansFiltered:
             total_vlsrs.append(i[1])
+            #if abs(i[1]) < 2:
+            #    for zi in i:
+            #        print(zi)
+
+            #s    print('')
 
         y_exp = data.spectrum.Tb
 
         #determining the top densest windows of +/- dV in the vlsr distribution
-        top_bins = (top_k_densest_windows(total_vlsrs, window_radius=1*dv_value, top_k=10))
-        #print(total_vlsrs)
+        top_bins = (top_k_densest_windows(total_vlsrs, window_radius=1*dv_value, top_k=50))
         #print(top_bins)
+        top_scored_bins = []
+        for tb in top_bins:
+            if tb[0] == top_bins[0][0]:
+                top_scored_bins.append(tb)
+
+        if len(top_scored_bins) > 1:
+        #print(total_vlsrs)
+        #preferentially choose the lower vlsrs
+            sorted_top_bins = sorted(top_scored_bins, key=lambda x: (x[0], abs((x[1] + x[2]) / 2)))
+            #print(sorted_top_bins)
+            top_bin = sorted_top_bins[0]
+        else:
+            top_bin = top_scored_bins[0]
+
         mol_list = []
         labels = [] 
         indivBin = []
+        #print(top_bin)
+        #top_bin = sorted_top_bins[0]
+        '''
+        #print('top bin')
+        for i in allCansFiltered:
+            if i[1] > top_bin[1] and i[1] < top_bin[2]:
+                for zi in i:
+                    print(zi)
+                print('')
 
-        top_bin = top_bins[0]
+        print('0!!!')
+        for i in allCansFiltered:
+            if i[1] > -2 and i[1] < 2:
+                for zi in i:
+                    print(zi)
+                print('')
+        '''
+    
+
         #storing the molecules that have a transition contributing to the top densest window
         for z in allCansFiltered:
             if z[1] <= top_bin[2] and z[1] >= top_bin[1]:
@@ -525,7 +725,7 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
                 residuals,
                 x0=initial_params,
                 bounds=(lower_bounds, upper_bounds),
-                args=(mol_list, y_exp, dv_value, ll0, ul0, data, cont_obj),
+                args=(mol_list, y_exp, dv_value, ll0, ul0, data, cont_obj, source_size),
                 method='trf',
                 verbose=0)
 

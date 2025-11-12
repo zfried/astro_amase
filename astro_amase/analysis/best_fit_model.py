@@ -33,28 +33,28 @@ import pandas as pd
 import numpy as np
 import os
 import pickle 
+import warnings
 from bokeh.plotting import figure, save, output_file
 from bokeh.models import (
-    HoverTool, CheckboxGroup, CustomJS, Button
+    HoverTool, CheckboxGroup, CustomJS, Button, ColumnDataSource
 )
 from bokeh.layouts import column, row
 from bokeh.plotting import figure, output_file, save
 from bokeh.models import HoverTool, Button, CustomJS, CheckboxGroup
 from scipy.optimize import least_squares
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, PchipInterpolator
 import gc
-from ..utils.molsim_classes import Source, Simulation, Continuum
+from ..utils.molsim_classes import Source, Simulation
 from ..constants import global_thresh
+
+
+
 
 
 
 def get_assigned_molecules(assignment: 'IterativeSpectrumAssignment'):
     """
-    Extract list of assigned molecules from IterativeSpectrumAssignment object.
-    
-    Compiles all molecules that have been assigned to at least one spectral line,
-    either as a single carrier or as one of multiple possible carriers. Returns
-    unique (molecule_name, database_source) tuples for use in subsequent analysis.
+    Extract list of assigned molecules and identify those only in blended single lines.
     
     Parameters
     ----------
@@ -65,18 +65,24 @@ def get_assigned_molecules(assignment: 'IterativeSpectrumAssignment'):
     -------
     assignedMols : list of tuple
         List of (molecule_name, database_source) tuples for all molecules assigned to
-        at least one spectral line. Used as input for subsequent best-fit modeling.
-        Example: [('CH3OH', 'CDMS'), ('HC3N', 'JPL')]
+        at least one spectral line.
+    blended_single_line_mols : list of tuple
+        List of (molecule_name, database_source) tuples for molecules that only
+        appear in blended assignments and only in a single line.
     """
     
     globalThreshOriginal = global_thresh
     
     assignList = []
     
+    # Track molecules in blended vs single assignments
+    blended_mols = {}  # {(formula, linelist): count}
+    single_mols = set()  # {(formula, linelist)}
+    
     # Loop through all lines
     for line in assignment.lines:
         
-        # Handle multiple carriers case
+        # Handle multiple carriers case (blended)
         if line.assignment_status is not None and line.assignment_status.value == 'multiple_carriers':
             # Get unique molecules passing global threshold
             passing_mols = {}
@@ -86,28 +92,40 @@ def get_assigned_molecules(assignment: 'IterativeSpectrumAssignment'):
                     if key not in passing_mols or candidate.combined_score > passing_mols[key].combined_score:
                         passing_mols[key] = candidate
             
-            # Add all passing molecules
+            # Add all passing molecules to assignList
             for candidate in passing_mols.values():
                 assignList.append((candidate.smiles, candidate.formula, 
                                   candidate.global_score, candidate.linelist))
+                
+                # Count occurrences in blended lines
+                mol_key = (candidate.formula, candidate.linelist)
+                blended_mols[mol_key] = blended_mols.get(mol_key, 0) + 1
         
         # Handle single assignment case
         elif line.assignment_status is not None and line.assignment_status.value == 'assigned':
             assignList.append((line.assigned_smiles, line.assigned_molecule, 
                              line.best_candidate.global_score, line.best_candidate.linelist))
+            
+            mol_key = (line.assigned_molecule, line.best_candidate.linelist)
+            single_mols.add(mol_key)
     
     # Create list of unique assigned molecules
     assignedMols = []
-    
     for entry in assignList:
         smiles, formula, score, linelist = entry
         if (formula, linelist) not in assignedMols:
             assignedMols.append((formula, linelist))
     
-    return assignedMols
+    # Find molecules that are ONLY in blended lines (not in single) and appear only once
+    blended_single_line_mols = [
+        mol_key for mol_key, count in blended_mols.items()
+        if count == 1 and mol_key not in single_mols
+    ]
 
 
-def compute_molecule_lookup_table(mol, label, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value):
+    return assignedMols, blended_single_line_mols
+
+def compute_molecule_lookup_table(mol, label, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value, source_size):
     """
     Compute a lookup table of synthetic spectra for a single molecule across a grid of column densities.
     
@@ -150,7 +168,7 @@ def compute_molecule_lookup_table(mol, label, log_columns, tempInput, dv_value, 
 
     # Create Source object once
     #src = molsim.classes.Source(Tex=temp, column=log_columns[0], dV=dv_value, velocity = vlsr_value)
-    src = Source(size=1.E20, dV=dv_value, velocity=vlsr_value, Tex=tempInput, column=log_columns[0], continuum=cont)
+    src = Source(size=source_size, dV=dv_value, velocity=vlsr_value, Tex=tempInput, column=log_columns[0], continuum=cont)
     for col_idx, column_density in enumerate(log_columns):
         # Update only the column density
         src.column = column_density
@@ -165,12 +183,24 @@ def compute_molecule_lookup_table(mol, label, log_columns, tempInput, dv_value, 
             use_obs=True,
             observation=dataScrape
         )
-        spectra_grid.append(np.array(sim.spectrum.int_profile))
+        spectrum = np.array(sim.spectrum.int_profile)
+        
+        # Handle empty spectra in lookup table generation
+        if spectrum.size == 0:
+            # Get expected size from dataScrape observation
+            if hasattr(dataScrape, 'spectrum') and hasattr(dataScrape.spectrum, 'frequency'):
+                expected_size = len(dataScrape.spectrum.frequency)
+                spectrum = np.zeros(expected_size)
+                warnings.warn(f"Empty spectrum generated for {label} at column density {column_density:.2e}, using zeros")
+            else:
+                warnings.warn(f"Empty spectrum generated for {label} at column density {column_density:.2e}, cannot determine size")
+        
+        spectra_grid.append(spectrum)
 
     return label, np.array(spectra_grid)
 
 
-def build_lookup_tables_serial(mol_list, labels, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value):
+def build_lookup_tables_serial(mol_list, labels, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value, source_size):
     """
     Build lookup tables for multiple molecules by computing spectra at gridded column densities.
     
@@ -213,7 +243,7 @@ def build_lookup_tables_serial(mol_list, labels, log_columns, tempInput, dv_valu
     lookup_tables = {}
 
     for mol, label in zip(mol_list, labels):
-        label, spectra_grid = compute_molecule_lookup_table(mol, label, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value)
+        label, spectra_grid = compute_molecule_lookup_table(mol, label, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value, source_size)
         lookup_tables[label] = {
             'column_grid': log_columns,
             'spectra_grid': spectra_grid,
@@ -249,6 +279,7 @@ def setup_interpolators(lookup_tables):
         table = lookup_tables[label]
         log_columns = table['log_column_grid']
         spectra = table['spectra_grid']
+
         interp_func = interp1d(
             log_columns,
             spectra,
@@ -257,6 +288,15 @@ def setup_interpolators(lookup_tables):
             bounds_error=False,
             fill_value='extrapolate'
         )
+        '''
+
+        interp_func = PchipInterpolator(
+            log_columns,
+            spectra,
+            axis=0,
+            extrapolate=True
+        )
+        '''
         table['interpolator'] = interp_func
     return lookup_tables
 
@@ -311,12 +351,32 @@ def simulate_sum_lookup(columns, labels, lookup_tables):
         1D array containing the summed intensity profile across all molecules.
     """
     total_spectrum = None
+    expected_length = None
+    
     for column_density, label in zip(columns, labels):
         spectrum = get_spectrum_from_lookup(label, column_density, lookup_tables)
+        
+        # Determine expected length from first non-empty spectrum
+        if expected_length is None and spectrum.size > 0:
+            expected_length = spectrum.size
+        
+        # Replace empty spectra with zeros
+        if spectrum.size == 0:
+            if expected_length is not None:
+                spectrum = np.zeros(expected_length)
+                warnings.warn(f"Empty spectrum generated for {label}, using zeros")
+            else:
+                warnings.warn(f"Empty spectrum generated for {label}, skipping (no reference length yet)")
+                continue
+        
         if total_spectrum is None:
             total_spectrum = spectrum.copy()
         else:
             total_spectrum += spectrum
+    
+    if total_spectrum is None:
+        raise ValueError("All molecular spectra are empty. Cannot proceed with fitting.")
+    
     return total_spectrum
 
 def residuals_lookup(columns, labels, lookup_tables, y_exp):
@@ -383,7 +443,7 @@ def filter_lookup_tables(lookup_tables, mol_list, labels, keep_labels):
 
 def fit_spectrum_lookup(mol_list, labels, initial_columns, y_exp, bounds,
                        tempInput, dv_value, cont, ll0, ul0, dataScrape,
-                       column_range=(1e19, 1e15), n_grid_points=30, vlsr_value = None):
+                       column_range=(1e10, 1e20), n_grid_points=30, vlsr_value = None, source_size = 1.E20):
     """
     Perform spectral fitting using pre-computed lookup tables and nonlinear optimization.
     
@@ -417,7 +477,7 @@ def fit_spectrum_lookup(mol_list, labels, initial_columns, y_exp, bounds,
     dataScrape : Observation
         Observation object with frequency grid.
     column_range : tuple, optional
-        (max, min) column density range for lookup table grid. Default (1e19, 1e15).
+        (min, max) column density range for lookup table grid. Default (1e10, 1e20).
     n_grid_points : int, optional
         Number of grid points for lookup table. Default 30.
     vlsr_value : float, optional
@@ -432,8 +492,10 @@ def fit_spectrum_lookup(mol_list, labels, initial_columns, y_exp, bounds,
         residuals, convergence information, and other optimization diagnostics.
     """
     log_columns = np.logspace(np.log10(column_range[0]), np.log10(column_range[1]), n_grid_points)
+
+    #print(log_columns)
     lookup_tables = build_lookup_tables_serial(
-        mol_list, labels, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value
+        mol_list, labels, log_columns, tempInput, dv_value, cont, ll0, ul0, dataScrape, vlsr_value, source_size
     )
     lookup_tables = setup_interpolators(lookup_tables)
 
@@ -445,7 +507,7 @@ def fit_spectrum_lookup(mol_list, labels, initial_columns, y_exp, bounds,
         method='trf',
         verbose=2,
         ftol=1e-6,
-        max_nfev=25
+        max_nfev=23
     )
     return lookup_tables, result
 
@@ -496,15 +558,31 @@ def get_individual_contributions_lookup(fitted_columns, labels, lookup_tables):
         Each spectrum shows that molecule's contribution to the total fit.
     """
     contributions = {}
+    expected_length = None
+    
+    # First pass: determine expected length
     for column_density, label in zip(fitted_columns, labels):
         spectrum = get_spectrum_from_lookup(label, column_density, lookup_tables)
+        if spectrum.size > 0:
+            expected_length = spectrum.size
+            break
+    
+    # Second pass: get contributions, replacing empty with zeros
+    for column_density, label in zip(fitted_columns, labels):
+        spectrum = get_spectrum_from_lookup(label, column_density, lookup_tables)
+        
+        if spectrum.size == 0 and expected_length is not None:
+            spectrum = np.zeros(expected_length)
+            warnings.warn(f"Empty spectrum generated for {label}, using zeros in contributions")
+        
         contributions[label] = spectrum
+    
     return contributions
 
 def plot_simulation_vs_experiment_html_bokeh_compact_float32(
     y_exp, mol_list, best_columns, labels, filename, ll0, ul0, observation,
     peak_freqs, peak_intensities, temp, dv_value, vlsr_value, cont, direc, sourceSize=1.0E20,
-    peak_window=1.0, max_initial_traces=20
+    peak_window=1.0, max_initial_traces=20, save_html=True
 ):
     """
     Create interactive HTML visualization of fitted spectra using Bokeh.
@@ -552,6 +630,8 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
         Frequency window (MHz) around each peak for carrier identification. Default 1.0.
     max_initial_traces : int, optional
         Maximum number of molecular traces visible initially. Default 20.
+    save_html : bool, optional
+        If True, saves plot to HTML file. If False, just returns layout. Default: True.
     
     Returns
     -------
@@ -566,6 +646,8 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
         - carrier_molecules: list of molecules contributing to peak
     peak_df : DataFrame
         Pandas DataFrame of peak_results, also saved as 'final_peak_results.csv'.
+    layout : Bokeh layout object
+        The plot layout for displaying in notebooks or further manipulation.
     
     Notes
     -----
@@ -574,6 +656,10 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
     - Interactive controls include Show/Hide All buttons and individual trace checkboxes
     - Hover tool displays trace name, frequency, and intensity at cursor position
     """
+
+    # Initial garbage collection for clean slate
+    gc.collect()
+    print("Starting plot generation (memory cleanup complete)")
 
     # Convert experimental spectrum to float32
     freqs = observation.spectrum.frequency.astype(np.float32)
@@ -588,21 +674,24 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
         '#bcbd22', '#17becf'
     ]
 
-    # Main plot
+    # Main plot with WebGL backend for better performance
     p = figure(
         width=1200,
         height=700,
         title="Observed vs Simulated Spectra",
         x_axis_label="Frequency (MHz)",
         y_axis_label="Intensity",
-        tools="pan,wheel_zoom,box_zoom,reset,save"
+        tools="pan,wheel_zoom,box_zoom,reset,save",
+        output_backend="webgl"  # Use WebGL for large datasets
     )
 
     renderers = []
     names = []
 
-    # Experimental spectrum
-    r_exp = p.line(freqs, y_exp, line_color='black', line_width=2, visible=True, name="Observations")
+    # Experimental spectrum using ColumnDataSource for efficiency
+    exp_source = ColumnDataSource(data=dict(x=freqs, y=y_exp))
+    r_exp = p.line('x', 'y', source=exp_source, line_color='black', 
+                   line_width=2, visible=True, name="Observations")
     renderers.append(r_exp)
     names.append("Observations")
 
@@ -618,14 +707,23 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
         )
 
         spec = np.array(sim.spectrum.int_profile, dtype=np.float32)  # convert to float32
+        
+        # Handle empty spectra
+        if spec.size == 0:
+            spec = np.zeros_like(total_sim)
+            warnings.warn(f"Empty spectrum generated for {labels[i] if i < len(labels) else f'Molecule {i+1}'}, using zeros")
+        
         individual_sims.append(spec)
         total_sim += spec
         maxSimInts.append(np.max(spec))
 
         mol_name = labels[i] if i < len(labels) else f"Molecule {i+1}"
         visible = i < max_initial_traces
+        
+        # Use ColumnDataSource for better memory management
+        mol_source = ColumnDataSource(data=dict(x=freqs, y=spec))
         r = p.line(
-            freqs, spec,
+            'x', 'y', source=mol_source,
             line_color=base_colors[i % len(base_colors)],
             line_width=1.2,  # slightly thinner lines
             line_dash="dashed",
@@ -634,9 +732,19 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
         )
         renderers.append(r)
         names.append(mol_name)
+        
+        # Free Source and Simulation objects immediately
+        del src, sim
+        
+        # Periodic garbage collection every 10 molecules
+        if (i + 1) % 10 == 0:
+            gc.collect()
+            print(f"  Progress: {i+1}/{len(mol_list)} molecules (GC performed)")
 
-    # Total simulated spectrum
-    r_total = p.line(freqs, total_sim, line_color='red', line_width=2, visible=True, name="Total Simulated")
+    # Total simulated spectrum using ColumnDataSource
+    total_source = ColumnDataSource(data=dict(x=freqs, y=total_sim))
+    r_total = p.line('x', 'y', source=total_source, line_color='red', 
+                    line_width=2, visible=True, name="Total Simulated")
     renderers.append(r_total)
     names.append("Total Simulated")
 
@@ -670,11 +778,19 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
     controls = column(row(show_button, hide_button), checkbox_group)
     layout = row(p, controls)
 
-    # Save HTML
-    filename = os.path.join(direc,filename)
-    output_file(filename)
-    save(layout)
-    print(f"Interactive plot saved to {filename}")
+    # Conditionally save HTML
+    if save_html:
+        print("Preparing to save HTML file...")
+        gc.collect()  # CRITICAL: Free all possible memory before Bokeh serialization
+        print("  Memory cleanup complete, saving to disk...")
+        
+        filename = os.path.join(direc, filename)
+        output_file(filename)
+        save(layout)
+        
+        # Check file size to detect potential truncation
+        filesize_mb = os.path.getsize(filename) / (1024 * 1024)
+        print(f"Interactive plot saved to {filename} ({filesize_mb:.1f} MB)")
 
     # Peak analysis
     peak_results = []
@@ -685,7 +801,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
         sim_intensities = [np.max(sim[idxs]) for sim in individual_sims]
         total_sim_intensity = np.max(total_sim[idxs])
-        threshold = 0.2 * exp_intensity_max
+        threshold = 0.1 * exp_intensity_max
 
         carriers = [
             labels[i] if i < len(labels) else f"Molecule {i+1}"
@@ -704,13 +820,18 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
     peak_results.sort(key=lambda x: x['experimental_intensity_max'], reverse=True)
     peak_df = pd.DataFrame(peak_results)
-    peak_df.to_csv(os.path.join(direc, 'final_peak_results.csv'), index=False)
+    
+    if save_html:
+        peak_df.to_csv(os.path.join(direc, 'final_peak_results.csv'), index=False)
 
-    return maxSimInts, peak_results, peak_df
+    # Final cleanup
+    gc.collect()
+
+    return maxSimInts, peak_results, peak_df, layout
 
 
 
-def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont):
+def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range):
     """
     Execute complete spectral fitting workflow with quality control and visualization.
     
@@ -755,11 +876,14 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
     
     Returns
     -------
-    None
-        Results are written to files in the specified directory:
-        - 'fit_spectrum.html': Interactive Bokeh visualization
-        - 'column_density_results.csv': Best-fit column densities and SMILES strings
-        - 'final_peak_results.csv': Peak identification and carrier analysis
+    delMols : list
+        List of molecule names that were removed during quality control
+    cdDF : DataFrame
+        Best-fit column densities and SMILES strings for retained molecules
+    peak_df : DataFrame
+        Peak identification and carrier analysis results
+    internal_data : dict
+        Dictionary containing all data needed to recreate the plot in a notebook
     
     Notes
     -----
@@ -786,8 +910,23 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
     mol_list = []
     labels = []
 
-    assignedMols = get_assigned_molecules(assigner)
 
+            
+    assignedMols, blended_single_mols = get_assigned_molecules(assigner)
+
+    for i in force_include_mols:
+        if i in cdms_mols:
+            if (i, 'CDMS') not in assignedMols:
+                assignedMols.append((i, 'CDMS'))
+        elif i in jpl_mols:
+            if (i,'JPL') not in assignedMols:
+                assignedMols.append((i,'JPL'))
+        else:
+            warnings.warn(f"{i} was forced to be included in the fit but is not found in the CDMS or JPL databases. Please check the inputted molecule name.", UserWarning)
+        
+    
+    #blended_mols_final = [i[0] for i in blended_single_mols if i[0] not in force_include_mols]
+    blended_mols_final = []
     #hyperfine quality control
     delList1 = []
     for i in assignedMols:
@@ -798,7 +937,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
                 if g[0] == i_clean:
                     delList1.append(g[0])
 
-    assignedMols = [i for i in assignedMols if i[0] not in delList1]
+    assignedMols = [i for i in assignedMols if i[0] not in delList1 and i[0] not in blended_mols_final]
 
     #quality control for duplicated entries
     result = {}
@@ -855,9 +994,12 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
             else:
                 print('ignoring')
                 print(x)
-
-    initial_columns = np.full(len(mol_list), 1e14) # Initial guesses
-    bounds = (np.full(len(mol_list), 1e10), np.full(len(mol_list), 1e20))
+    if column_density_range[0] == 1.e10 and column_density_range[1] == 1.e20:
+        first_guess = 1.e14
+    else:
+        first_guess = (column_density_range[0]+column_density_range[1])/2
+    initial_columns = np.full(len(mol_list), first_guess) # Initial guesses
+    bounds = (np.full(len(mol_list), column_density_range[0]), np.full(len(mol_list), column_density_range[1]))
     y_exp = np.array(dataScrape.spectrum.Tb)
     print('Fitting iteration 1/2')
     lookup_tables, result = fit_spectrum_lookup(
@@ -872,9 +1014,11 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
         ll0=ll0,
         ul0=ul0,
         dataScrape=dataScrape,
-        column_range=(1.e10, 1.e20),
+        column_range=(column_density_range[0], column_density_range[1]),
         n_grid_points=30,
-        vlsr_value = vlsr_value
+        vlsr_value = vlsr_value,
+        source_size = sourceSize
+
     )
 
     fitted_columns = result.x
@@ -897,12 +1041,61 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
 
 
     delMols =[]
+
+    freqs = dataScrape.spectrum.frequency
+    y_exp = dataScrape.spectrum.Tb
+
+
+    all_carriers = {}
+    for l in labels:
+        all_carriers[l] = 0
+    peak_window = 0.5 * dv_value_freq
+    for peak, exp_intensity_max in zip(actualFrequencies, intensities):
+        idxs = np.where((freqs >= peak - peak_window) & (freqs <= peak + peak_window))[0]
+        if len(idxs) == 0:
+            continue
+
+        threshold = 0.2 * exp_intensity_max
+
+        sim_intensities = [np.max(individual_contributions[lbl][idxs]) for lbl in labels]
+        carriers = [
+            labels[i]
+            for i, inten in enumerate(sim_intensities)
+            if inten >= threshold and inten > 0
+        ]
+        for i, inten in enumerate(sim_intensities):
+            if inten >= threshold and inten > 0:
+                if inten/exp_intensity_max > 0.4 or len(carriers) == 1:
+                    all_carriers[labels[i]] = all_carriers[labels[i]] + 1
+
+        #total_sim_intensity = np.max(total_sim[idxs])
+        '''
+        carriers = [
+            labels[i]
+            for i, inten in enumerate(sim_intensities)
+            if inten >= threshold and inten > 0
+        ] or ['Unidentified']
+        #print(peak,exp_intensity_max)
+        #print(carriers)
+        #print('')
+        '''
+
+    #print(all_carriers)
+
+    for de in all_carriers:
+        if all_carriers[de] == 0 and all_carriers[de] not in force_include_mols:
+            delMols.append(de)
+        
+    #print('original del mols')
+    #print(delMols)
+
     for i in range(len(labels)):
         maxInt = max(cont_array[i])
         if maxInt <= 2.5*rms:
             diff_ssd = leave_one_out_ssd[i]-ssd_og
             if (diff_ssd/ssd_og) < 0.1:
-                delMols.append(labels[i])
+                if labels[i] not in force_include_mols:
+                    delMols.append(labels[i])
 
     keep_mol_list = [mol_list[i] for i in range(len(mol_list)) if labels[i] not in delMols]
     keep_labels = [labels[i] for i in range(len(mol_list)) if labels[i] not in delMols]
@@ -911,8 +1104,8 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
         lookup_tables, mol_list, labels, keep_labels
     )
 
-    bounds_filtered = (np.full(len(filtered_labels), 1e10),
-                    np.full(len(filtered_labels), 1e20))
+    bounds_filtered = (np.full(len(filtered_labels), column_density_range[0]),
+                    np.full(len(filtered_labels), column_density_range[1]))
 
     initial_columns_filtered = []
 
@@ -922,8 +1115,8 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
         initial_columns_filtered.append(fitted_columns[idx])
 
     initial_columns_filtered = np.array(initial_columns_filtered)
-    bounds_filtered = (np.full(len(filtered_labels), 1e10),
-                    np.full(len(filtered_labels), 1e20))
+    bounds_filtered = (np.full(len(filtered_labels), column_density_range[0]),
+                    np.full(len(filtered_labels), column_density_range[1]))
 
     print('Fitting iteration 2/2')
     result_filtered = least_squares(
@@ -933,7 +1126,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
         args=(filtered_labels, filtered_lookup, y_exp),
         method='trf',
         verbose=2,
-        xtol = 1e-8
+        ftol = 1e-7
     )
 
     fitted_columns_filtered = result_filtered.x
@@ -946,11 +1139,11 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
     del filtered_lookup
     gc.collect()
 
-    maxSimInts, peak_results, peak_df= plot_simulation_vs_experiment_html_bokeh_compact_float32(
+    maxSimInts, peak_results, peak_df, _= plot_simulation_vs_experiment_html_bokeh_compact_float32(
         y_exp, filtered_mols, fitted_columns_filtered, filtered_labels, "fit_spectrum.html", ll0, ul0, dataScrape,
-        actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc
+        actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc,
+        save_html=True, peak_window = 0.5*dv_value_freq, sourceSize = sourceSize
     )
-
 
     cdDF = pd.DataFrame()
     cdDF['molecule'] = filtered_labels
@@ -967,10 +1160,21 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, ll0,ul0,vlsr_valu
     cdDF['smiles'] = outputSmiles
 
     cdDF.to_csv(os.path.join(direc, 'column_density_results.csv'), index=False)
-    #print('del mols')
-    #print(delMols)
-    return delMols, cdDF,  peak_df
+    
+    # Store internal data for notebook plotting
+    internal_data = {
+        'directory_path': direc,
+        'y_exp': y_exp,
+        'filtered_mols': filtered_mols,
+        'fitted_columns': fitted_columns_filtered,
+        'filtered_labels': filtered_labels,
+        'll0': ll0,
+        'ul0': ul0,
+        'dataScrape': dataScrape,
+        'actualFrequencies': actualFrequencies,
+        'intensities': intensities,
+        'cont': cont
+    }
+    
+    return delMols, cdDF, peak_df, internal_data
 
-
-
-        

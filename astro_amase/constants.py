@@ -53,5 +53,5 @@ ignoreIso = [
 vicgae_model = VICGAE.from_pretrained()
 
 # Structural relevance hyperparameters
-covParam = 0.01
+covParam = 0.0105
 span = 3.5

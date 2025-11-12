@@ -15,16 +15,13 @@ matched with a template are removed to prevent duplication or interference.
 to weakest, with arrays of peak frequencies, intensities, and indices 
 prepared for further analysis.
 
-4. **Initial Gaussian Fitting (First Pass)**: For each peak, a local chunk of 
-data around the peak is extracted, and a Gaussian function is fit to the 
-intensity profile. The fit yields amplitude (`a`), center frequency (`mu`), 
-and width (`sigma`). Peaks too close to previously fitted peaks are skipped 
-to avoid double-counting. The FWHM for each peak is calculated as `2.355 * sigma`.
+4. **Initial Rough Fitting (First Pass)**: For each peak, approximate
+the FWHM using the estimate_fwhm_from_peak function.
 
 5. **Median FWHM Estimation**: The median FWHM from the first fitting pass is 
 computed and used as an initial guess for the second pass.
 
-6. **Refined Gaussian Fitting (Second Pass)**: The fitting procedure is repeated 
+6. **Refined Gaussian Fitting (Second Pass)**: Now fit Gaussian peaks to each peak
 with the median FWHM as an initial estimate, yielding refined peak positions 
 and linewidths. The FWHM is converted to velocity widths (`velFWHM`) using the 
 Doppler relation.
@@ -55,6 +52,59 @@ def gaussian(x, a, mu, sigma):
     """
 
     return a * np.exp(-(x - mu)**2 / (2 * sigma**2))
+
+
+def estimate_fwhm_from_peak(freq_arr, int_arr, peak_freq, peak_intensity):
+    """
+    Estimate the Full Width at Half Maximum (FWHM) of a spectral peak.
+    
+    Parameters
+    ----------
+    freq_arr : numpy.ndarray
+        Array of frequency values (x-axis of spectrum).
+    int_arr : numpy.ndarray
+        Array of intensity values (y-axis of spectrum).
+    peak_freq : float
+        Frequency value at the peak center.
+    peak_intensity : float
+        Intensity value at the peak maximum.
+    
+    Returns
+    -------
+    float or None
+        FWHM in frequency units. Returns None if the half-maximum points
+        cannot be found within the array bounds (e.g., peak too close to edges).
+    
+    Notes
+    -----
+    The function finds the nearest frequency point to peak_freq, calculates
+    the half-maximum intensity, then searches left and right from the peak
+    to find where the intensity drops below half-maximum. The FWHM is the
+    frequency difference between these two points.
+    """
+        
+    half_max = peak_intensity / 2
+
+    # Find index of the peak frequency (closest match)
+    peak_idx = np.argmin(np.abs(freq_arr - peak_freq))
+
+    # Search to the left
+    left_idx = peak_idx
+    while left_idx > 0 and int_arr[left_idx] > half_max:
+        left_idx -= 1
+
+    # Search to the right
+    right_idx = peak_idx
+    while right_idx < len(int_arr) - 1 and int_arr[right_idx] > half_max:
+        right_idx += 1
+
+    # Check if valid FWHM found
+    if left_idx == 0 or right_idx == len(int_arr) - 1:
+        return None  # FWHM could not be determined cleanly
+
+    fwhm_freq = freq_arr[right_idx] - freq_arr[left_idx]
+    return fwhm_freq
+
 
 def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):  
     """
@@ -160,6 +210,8 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
     alreadyMu = []
     fwhmList = []
 
+    '''
+
     for i in range(len(peak_indices)): #loop through all peaks
         #get a chunk of the frequency and intensity arrays around the peak
         freqChunk = freq_arr[peak_indices[i] - numVals:peak_indices[i] + numVals]
@@ -193,6 +245,18 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
 
     fwhmAttempt1 = statistics.median(fwhmList)
 
+    '''
+    roughWidths = []
+    for i in range(len(peak_indices)):
+        rough_fwhm = estimate_fwhm_from_peak(freq_arr, int_arr, peak_freqs[i], peak_ints[i])
+        if rough_fwhm is not None:
+            #rough_vel_fwhm = (rough_fwhm / peak_freqs[i]) * 299792.458
+            #print(f"Rough FWHM: {rough_fwhm:.4f} MHz")
+            roughWidths.append(rough_fwhm/2.355) 
+
+    medRoughWidth = statistics.median(roughWidths)
+
+        
 
     #Now we will do a second attempt at finding the linewidth, using the median FWHM from the first attempt, just to further refine the linewidth estimate.
     alreadyMu = []
@@ -204,7 +268,8 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
         freqChunk = freq_arr[peak_indices[i] - numVals:peak_indices[i] + numVals]
         intChunk = int_arr[peak_indices[i] - numVals:peak_indices[i] + numVals]
         #initial guess, including the median FWHM from the first attempt
-        initial_guess = [peak_ints[i], peak_freqs[i], fwhmAttempt1/2.355]
+        #initial_guess = [peak_ints[i], peak_freqs[i], fwhmAttempt1/2.355]
+        initial_guess = [peak_ints[i], peak_freqs[i], medRoughWidth]
 
 
         try:
@@ -253,83 +318,64 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
 
 def find_linewidth_standalone(freq_arr, int_arr, resolution, sigOG, data, rmsInp):  
     """
-    Determine median spectral linewidth through two-pass Gaussian fitting of detected peaks.
-    Used for the get_linewidth function within main.py. Has minor changes from the main find_linewidth function.
+    Estimate median spectral linewidth using two-pass fitting approach.
     
-    Implements a robust linewidth estimation algorithm that:
-    1. Identifies all spectral peaks above noise threshold
-    2. Sorts peaks by intensity (strongest first)
-    3. Fits Gaussian profiles to each peak using local data chunks
-    4. Calculates median FWHM from first-pass fits
-    5. Refines fits using median FWHM as initial guess
-    6. Converts frequency FWHM to velocity width via Doppler relation
-    7. Determines whether hyperfine structure should be considered
-    
+    Detects spectral peaks, performs rough FWHM estimation by finding half-maximum 
+    points, then refines with Gaussian fitting using the median rough FWHM as an 
+    initial guess. Returns median velocity and frequency linewidths and determines 
+    whether hyperfine structure should be considered.
     
     Parameters
     ----------
     freq_arr : array_like
-        Full frequency array (MHz) from the observation.
+        Frequency array (MHz) from the observation.
     int_arr : array_like
-        Full intensity array (brightness temperature) corresponding
-        to freq_arr.
+        Intensity array (brightness temperature) corresponding to freq_arr.
     resolution : float
-        Spectral resolution (MHz) of the observation, used for peak detection
-        and determining fit window size.
+        Spectral resolution (MHz) used for peak detection and fit window sizing.
     sigOG : float
-        Sigma cutoff of considered lines.
+        Sigma threshold for peak detection (peaks must be sigOG × RMS above noise).
     data : Observation
-        molsim Observation object containing spectrum attributes:
+        molsim Observation object with spectrum attributes:
         - data.spectrum.frequency: frequency array
         - data.spectrum.Tb: brightness temperature array
     rmsInp : float
-        Root-mean-square noise level of the spectrum for peak significance
-        thresholding in the local peak finder.
+        Root-mean-square noise level for peak significance thresholding.
     
     Returns
     -------
     dv_value : float
-        Median velocity linewidth (km/s) determined from Gaussian fits.
-        Represents the typical FWHM of spectral lines in velocity units.
+        Median velocity linewidth (km/s) from Gaussian fits.
     dv_value_freq : float
-        Median frequency linewidth (MHz), with minimum threshold of 0.15 MHz
-        to prevent excessively narrow search windows. Used for candidate
-        molecule matching and frequency analysis.
+        Median frequency linewidth (MHz), with minimum of 0.15 MHz applied.
     consider_hyperfine : bool
-        Flag indicating whether hyperfine catalogs should be
-        included in analysis. Set to True if dv_value_freq < 1 MHz, as
-        hyperfine splitting becomes significant at narrow linewidths.
+        True if dv_value_freq < 1 MHz (hyperfine splitting may be significant).
     
-    Algorithm Details
-    -----------------
-    **Peak Detection:**
-    - Uses find_peaks_local
-    
-    **First-Pass Fitting:**
-    - Extracts 50 MHz window around each peak (±numVals resolution elements)
-    - Initial guess: [peak_intensity, peak_frequency, 3 MHz]
-    - Fits Gaussian using scipy.optimize.curve_fit
-    - Rejects fits with center within 0.1 MHz of previous fits (avoids duplicates)
-    - Calculates FWHM = 2.355 x σ from fitted sigma parameter
-    - Computes median FWHM for use in second pass
-    
-    **Second-Pass Fitting:**
-    - Repeats fitting procedure with refined initial guess
-    - Initial sigma set to median FWHM/2.355 from first pass
-    - Converts FWHM to velocity: v_FWHM = (Δν_FWHM / ν) × c
-    - Uses speed of light c = 299792.458 km/s
-    - Computes final median velocity and frequency linewidths
-    
-    **Quality Control:**
-    - Skips peaks where Gaussian fitting fails to converge
-    - Prevents duplicate measurements from closely spaced peaks
-    - Applies 0.15 MHz minimum to frequency linewidth.
+    Algorithm
+    ---------
+    1. **Peak Detection**: Find all peaks using find_peaks_local with local RMS
+    2. **Peak Sorting**: Sort peaks by intensity (strongest first)
+    3. **First Pass (Rough Estimation)**: Use estimate_fwhm_from_peak for each peak
+       - Finds half-maximum intensity points by searching left and right from peak
+       - Calculates FWHM as frequency difference between half-max points
+       - Converts FWHM to sigma (σ = FWHM / 2.355)
+       - Computes median sigma from all successful estimates
+    4. **Second Pass (Gaussian Fitting)**: Fit Gaussians with refined initial guess
+       - Uses ±50 MHz window around each peak
+       - Initial guess: [peak_int, peak_freq, median_sigma_from_first_pass]
+       - Rejects duplicate fits within 0.1 MHz of previous centers
+       - Calculates FWHM = 2.355 × σ for each successful fit
+       - Converts FWHM to velocity: v_FWHM = (Δν_FWHM / ν) × c
+       - Speed of light c = 299792.458 km/s
+    5. **Output**: Return median velocity and frequency linewidths
     
     Notes
     -----
-    - The 0.15 MHz minimum frequency ensures that line width is not too narrow
-    and uncertain catalogs are not considered.
-    
+    - Minimum frequency linewidth of 0.15 MHz prevents overly narrow searches
+    - Hyperfine consideration flag set when linewidth < 1 MHz
+    - First pass provides robust initial estimates without curve fitting
+    - Second pass refines estimates using proper Gaussian fitting
+    - Skips peaks where curve_fit fails or half-max points not found
     """
     print('finding linewidth!')
 

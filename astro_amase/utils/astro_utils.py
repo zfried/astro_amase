@@ -608,3 +608,140 @@ def checkAllLines(form, rms, sorted_freqs, sorted_ints, dv_value_freq, closestFr
                 rule_out = True
 
     return rule_out
+
+
+"""
+Simple functions to save and load analysis parameters.
+"""
+
+import json
+import os
+from datetime import datetime
+from typing import Dict, Any
+
+
+def save_parameters(user_outputs: Dict[str, Any], results: Dict[str, Any], 
+                    output_dir: str, filename: str = "analysis_parameters.json") -> str:
+    """
+    Save all input and determined parameters to a JSON file for future reference.
+    
+    Parameters
+    ----------
+    user_outputs : dict
+        Dictionary of input parameters from the user
+    results : dict
+        Dictionary of determined parameters and results
+    output_dir : str
+        Directory where the parameter file will be saved
+    filename : str, optional
+        Name of the output file. Default: 'analysis_parameters.json'
+    
+    Returns
+    -------
+    str
+        Full path to the saved parameter file
+        
+    Examples
+    --------
+    >>> from parameter_io import save_parameters
+    >>> params_file = save_parameters(user_outputs, results, './output/')
+    >>> print(f"Parameters saved to: {params_file}")
+    """
+    # Build comprehensive parameter dictionary
+    params = {
+        "metadata": {
+            "timestamp": datetime.now().isoformat(),
+            "analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        },
+        
+        "input_parameters": {
+            "spectrum_path": user_outputs.get('spectrum_path'),
+            "directory_path": user_outputs.get('directory_path'),
+            "temperature_input": float(user_outputs.get('temperature', 0)),
+            "temperature_is_exact": user_outputs.get('temperature_choice', False),
+            "vlsr_input": float(user_outputs['vlsr_input']) if user_outputs.get('vlsr_input') is not None else None,
+            "vlsr_known": user_outputs.get('vlsr_known', False),
+            "sigma_threshold": float(user_outputs.get('sigma_threshold', 5.0)),
+            "observation_type": user_outputs.get('observation_type'),
+            "observation_type_description": "single_dish" if user_outputs.get('observation_type') == '1' else "interferometric",
+            "beam_major_axis_or_dish_diameter": float(user_outputs.get('bmaj_or_dish', 0)),
+            "beam_minor_axis": float(user_outputs['bmin']) if user_outputs.get('bmin') is not None else None,
+            "source_size": float(user_outputs.get('source_size', 1E20)),
+            "continuum_temperature": float(user_outputs.get('continuum_temperature', 2.7)),
+            "valid_atoms": user_outputs.get('valid_atoms', ['C', 'O', 'H', 'N', 'S']),
+            "rms_noise_manual": float(user_outputs['rms_noise']) if user_outputs.get('rms_manual') else None,
+            "rms_manual": user_outputs.get('rms_manual', False),
+            "force_ignore_molecules": user_outputs.get('force_ignore_molecules', []),
+            "force_include_molecules": user_outputs.get('force_include_molecules', [])
+        },
+        
+        "determined_parameters": {
+            "temperature": float(results.get('temperature', 0)),
+            "vlsr": float(results.get('vlsr', 0)),
+            "linewidth_kms": float(results.get('linewidth', 0)),
+            "linewidth_mhz": float(results.get('linewidth_freq', 0)),
+            "rms_noise": float(results.get('rms', 0)),
+            "resolution": float(results.get('resolution',0.1))
+        },
+        
+        "analysis_statistics": {
+            "total_lines_detected": results.get('statistics', {}).get('total_lines', 0),
+            "assigned_lines": results.get('statistics', {}).get('assigned', 0),
+            "unidentified_lines": results.get('statistics', {}).get('unidentified', 0),
+            "execution_time_seconds": float(results.get('execution_time', 0)),
+            "execution_time_minutes": round(float(results.get('execution_time', 0)) / 60, 2)
+        },
+        
+        "output_files": {
+            "interactive_plot": results.get('output_files', {}).get('interactive_plot'),
+            "peak_results": results.get('output_files', {}).get('peak_results'),
+            "detailed_report": results.get('output_files', {}).get('detailed_report'),
+            "column_densities": results.get('output_files', {}).get('column_densities'),
+            "parameter_file": os.path.join(output_dir, filename)
+        }
+    }
+    
+    # Ensure output directory exists
+    #os.makedirs(output_dir, exist_ok=True)
+    
+    # Save to JSON file
+    output_path = os.path.join(output_dir, filename)
+    with open(output_path, 'w') as f:
+        json.dump(params, f, indent=2)
+    
+    print(f"\nParameters saved to: {output_path}")
+    
+    return output_path
+
+
+def load_parameters(filepath: str) -> Dict[str, Any]:
+    """
+    Load previously saved analysis parameters from a JSON file.
+    
+    Parameters
+    ----------
+    filepath : str
+        Path to the saved parameter JSON file
+    
+    Returns
+    -------
+    dict
+        Dictionary containing all saved parameters with keys:
+        - metadata: timestamp and analysis date
+        - input_parameters: all user-provided inputs
+        - determined_parameters: VLSR, temperature, linewidth, RMS
+        - analysis_statistics: line counts and execution time
+        - output_files: paths to all output files
+        
+    Examples
+    --------
+    >>> from parameter_io import load_parameters
+    >>> params = load_parameters('./output/analysis_parameters.json')
+    >>> print(f"Previous VLSR: {params['determined_parameters']['vlsr']} km/s")
+    >>> print(f"Previous Temperature: {params['determined_parameters']['temperature']} K")
+    >>> print(f"Previous Linewidth: {params['determined_parameters']['linewidth_kms']} km/s")
+    """
+    with open(filepath, 'r') as f:
+        params = json.load(f)
+    
+    return params

@@ -202,7 +202,7 @@ def create_folders_load_data(direc, tempInput):
 
 
 
-def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrape,vlsr_value, dv_value_freq, consider_hyperfine, user_temp,sourceSize,ll0,ul0, freq_arr,resolution, cont_temp):
+def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrape,vlsr_value, dv_value_freq, consider_hyperfine, user_temp,sourceSize,ll0,ul0, freq_arr,resolution, cont_temp, ignore_mol_list):
     """
     Generate comprehensive molecular candidate dataset for all spectral lines with simulated spectra.
     
@@ -318,7 +318,10 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
         database_freqs, database_errs, database_tags, database_lists, database_smiles, database_names, database_isos, database_vibs, database_forms = pickle.load(f)
 
     splatDict = {}
-
+    ignoreMolDict = {}
+    for i in ignore_mol_list:
+        ignoreMolDict[i] = False
+    ignore_mol_list = set(ignore_mol_list)    
     #lists to store frequencies and intensities of lines that dont have any molecular candidates
     noCanFreq =[] 
     noCanInts = []
@@ -383,11 +386,14 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
             database_names[match_idx], database_forms[match_idx], database_smiles[match_idx], database_freqs[match_idx],
             database_errs[match_idx], database_isos[match_idx], database_tags[match_idx], database_lists[match_idx],
             database_vibs[match_idx])
-            if consider_hyperfine == True:
-                line_mols.append(match_tu)
-            else:
-                if match_tu[6] < 200000:  # Exclude hyperfine lines
+            if database_names[match_idx] not in ignore_mol_list:
+                if consider_hyperfine == True:
                     line_mols.append(match_tu)
+                else:
+                    if match_tu[6] < 200000:  # Exclude hyperfine lines
+                        line_mols.append(match_tu)
+            else:
+                ignoreMolDict[database_names[match_idx]] = True
 
 
         '''
@@ -682,5 +688,9 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
     dfMolSmiles['smiles'] = mol_smileSmiles
     dfMolSmiles.to_csv(os.path.join(direc, 'mol_smiles.csv'), index=False)
 
+
+    for p in ignoreMolDict:
+        if ignoreMolDict[p] == False:
+            print('Algorithm was forced to ignore',p,'but never came across a line for which this was a potential candidate.')
     return all_loaded, noCanFreq, noCanInts, splatDict, cont_obj
 

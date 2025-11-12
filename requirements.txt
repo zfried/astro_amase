@@ -1,5 +1,6 @@
 pandas
 numpy
+torch
 rdkit
 scipy
 bokeh
@@ -8,3 +9,4 @@ astropy
 matplotlib
 pyyaml
 astrochem_embedding
+group-selfies @ git+https://github.com/aspuru-guzik-group/group-selfies.git
