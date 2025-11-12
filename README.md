@@ -199,9 +199,8 @@ astro_amase.show_fit_in_notebook(results, mols_to_display=['CH3OH', 'H2CO'])
 Generate interactive plots from previously saved analysis results:
 
 ```python
-from astro_amase.utils.plotting import plot_from_saved
 
-plot_from_saved(
+astro_amase.plot_from_saved(
     spectrum_path='spectrum.txt',
     directory_path='./directory/',
     column_density_csv='./directory/column_density_results.csv',
@@ -209,7 +208,7 @@ plot_from_saved(
 )
 
 # Filter to specific molecules
-plot_from_saved(
+astro_amase.plot_from_saved(
     spectrum_path='spectrum.txt',
     directory_path='./directory/',
     column_density_csv='./directory/column_density_results.csv',
@@ -223,9 +222,8 @@ plot_from_saved(
 Create detailed PDF files showing individual spectral peaks with quantum number assignments:
 
 ```python
-from astro_amase.utils.plotting import get_individual_plots
 
-get_individual_plots(
+astro_amase.get_individual_plots(
     spectrum_path='spectrum.txt',
     directory_path='./directory/',
     column_density_csv='./directory/column_density_results.csv',
