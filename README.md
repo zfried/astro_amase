@@ -74,7 +74,7 @@ import astro_amase
 
 results = astro_amase.assign_observations(
     spectrum_path='spectrum.txt',
-    directory_path='./analysis/',
+    directory_path='./directory/',
     temperature=150.0,
     sigma_threshold=5.0,
     observation_type='interferometric',
@@ -203,17 +203,17 @@ from astro_amase.utils.plotting import plot_from_saved
 
 plot_from_saved(
     spectrum_path='spectrum.txt',
-    directory_path='./analysis/',
-    column_density_csv='./analysis/column_density_results.csv',
-    stored_json='./analysis/output_parameters.json'
+    directory_path='./directory/',
+    column_density_csv='./directory/column_density_results.csv',
+    stored_json='./directory/output_parameters.json'
 )
 
 # Filter to specific molecules
 plot_from_saved(
     spectrum_path='spectrum.txt',
-    directory_path='./analysis/',
-    column_density_csv='./analysis/column_density_results.csv',
-    stored_json='./analysis/output_parameters.json',
+    directory_path='./directory/',
+    column_density_csv='./directory/column_density_results.csv',
+    stored_json='./directory/output_parameters.json',
     mols_to_display=['CH3OH', 'CH3CN', 'H2CO']
 )
 ```
@@ -227,9 +227,9 @@ from astro_amase.utils.plotting import get_individual_plots
 
 get_individual_plots(
     spectrum_path='spectrum.txt',
-    directory_path='./analysis/',
-    column_density_csv='./analysis/column_density_results.csv',
-    stored_json='./analysis/output_parameters.json',
+    directory_path='./directory/',
+    column_density_csv='./directory/column_density_results.csv',
+    stored_json='./directory/output_parameters.json',
     minimum_intensity='default'  # or specify a custom threshold
 )
 ```
