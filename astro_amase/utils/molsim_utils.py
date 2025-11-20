@@ -109,7 +109,7 @@ def _apply_vlsr(frequency,vlsr):
 	Applies a vlsr shift to a frequency array.  Frequency in [MHz], vlsr in [km/s]
 	'''
 	return frequency - vlsr*frequency/ckm
-
+'''
 def _apply_beam(freq_arr,int_arr,source_size,dish_size,return_beam=False):
 	beam_size = 206265 * 1.22 * (cm/(freq_arr * 1E6)) / dish_size #get beam size in arcsec
 	beam_dilution = source_size**2 / (beam_size**2 + source_size**2)
@@ -117,7 +117,44 @@ def _apply_beam(freq_arr,int_arr,source_size,dish_size,return_beam=False):
 		return int_arr*beam_dilution
 	else:
 		return int_arr*beam_dilution,beam_dilution
-	
+'''
+def _apply_beam(freq_arr, int_arr, source_size, dish_size=None, synth_beam=None, return_beam=False):
+	"""
+	Apply beam dilution correction.
+
+	Parameters
+	----------
+	freq_arr : array
+		Frequency array in MHz (only used for single dish)
+	int_arr : array
+		Intensity array to correct
+	source_size : float
+		Source size in arcsec
+	dish_size : float, optional
+		Dish diameter in meters (for single dish)
+	synth_beam : list/array, optional
+		[bmaj, bmin] in arcsec (for interferometers)
+	return_beam : bool
+		Whether to return the dilution factor
+	"""
+	if synth_beam is not None:
+		# Array/interferometer case - use synthesized beam
+		beam_size = np.sqrt(synth_beam[0] * synth_beam[1])  # geometric mean
+	elif dish_size is not None:
+		# Single dish case - calculate from diffraction
+		beam_size = 206265 * 1.22 * (cm/(freq_arr * 1E6)) / dish_size
+	else:
+		raise ValueError("Must provide either dish_size or synth_beam")
+
+	beam_dilution = source_size**2 / (beam_size**2 + source_size**2)
+
+	#print('beam dilution', beam_dilution)
+
+	if return_beam is False:
+		return int_arr * beam_dilution
+	else:
+		return int_arr * beam_dilution, beam_dilution
+
 def _make_fmted_qnstr(qns,qnstr_fmt=None):
 	'''
 	Given a qnstr_fmt formatter declaration, turns a set of quantum numbers into a

@@ -1288,14 +1288,59 @@ class Simulation(object):
 			  (k*Tbg))) -1)**-1
 			  )			  
 		return (J_T - J_Tbg)*(1 - np.exp(-tau))
-		
+	'''
 	def _beam_correct(self):
 		if self.observation is not None:
 			if self.observation.observatory.sd is True:
 				self.spectrum.Tb,self.beam_dilution = _apply_beam(self.spectrum.frequency,self.spectrum.Tb,self.source.size,self.observation.observatory.dish,return_beam=True)
 				self.spectrum.int_profile = _apply_beam(self.spectrum.freq_profile,self.spectrum.int_profile,self.source.size,self.observation.observatory.dish,return_beam=False)
+		return
+	'''
+
+	def _beam_correct(self):
+		if self.observation is not None:
+			obs = self.observation.observatory
+			
+			# Determine which beam parameters to use
+			if obs.sd is True:
+				# Single dish - use dish size
+				self.spectrum.Tb, self.beam_dilution = _apply_beam(
+					self.spectrum.frequency,
+					self.spectrum.Tb,
+					self.source.size,
+					dish_size=obs.dish,
+					synth_beam=None,
+					return_beam=True
+				)
+				self.spectrum.int_profile = _apply_beam(
+					self.spectrum.freq_profile,
+					self.spectrum.int_profile,
+					self.source.size,
+					dish_size=obs.dish,
+					synth_beam=None,
+					return_beam=False
+				)
+			
+			elif obs.array is True:
+				# Interferometer - use synthesized beam
+				self.spectrum.Tb, self.beam_dilution = _apply_beam(
+					self.spectrum.frequency,  # Not used but keep for consistency
+					self.spectrum.Tb,
+					self.source.size,
+					dish_size=None,
+					synth_beam=obs.synth_beam,
+					return_beam=True
+				)
+				self.spectrum.int_profile = _apply_beam(
+					self.spectrum.freq_profile,
+					self.spectrum.int_profile,
+					self.source.size,
+					dish_size=None,
+					synth_beam=obs.synth_beam,
+					return_beam=False
+				)
 		return	
-		
+			
 	def _apply_eta(self):
 		if self.observation is not None and self.observation.observatory is not None and self.observation.observatory.eta is not None:
 				self.spectrum.Tb *= self.observation.observatory.eta

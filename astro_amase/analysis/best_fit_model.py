@@ -169,6 +169,8 @@ def compute_molecule_lookup_table(mol, label, log_columns, tempInput, dv_value, 
     # Create Source object once
     #src = molsim.classes.Source(Tex=temp, column=log_columns[0], dV=dv_value, velocity = vlsr_value)
     src = Source(size=source_size, dV=dv_value, velocity=vlsr_value, Tex=tempInput, column=log_columns[0], continuum=cont)
+
+
     for col_idx, column_density in enumerate(log_columns):
         # Update only the column density
         src.column = column_density
@@ -694,6 +696,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
                    line_width=2, visible=True, name="Observations")
     renderers.append(r_exp)
     names.append("Observations")
+
 
     # Individual molecules
     for i, (mol, col) in enumerate(zip(mol_list, best_columns)):

@@ -50,13 +50,14 @@ def load_data_original(specPath, observation_type, bmaj, bmin, rmsInp):
     min_separation = resolution * ckm / np.amax(freq_arr) #minimum separation between peaks in km/s
 
     #setting telescope parameters
-    if observation_type == 'single_dish':
+    print(observation_type)
+    if observation_type == '1':
         observatory1 = Observatory(sd=True, dish=bmaj)
     else:
         observatory1 = Observatory(sd=False, array=True,synth_beam = [bmaj,bmin])
 
     data.observatory = observatory1
-
+    
     bandwidth = ul0[-1] - ll0[0]
     
     if rmsInp == None:
@@ -208,11 +209,11 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
     numVals = int(50/resolution) #number of resolution units to make 50 MHz
 
     #set the telescope parameters.
-    if observation_type == 'single_dish':
+    if observation_type == '1':
         observatory1 = Observatory(sd=True, dish=bmaj)
     else:
         observatory1 = Observatory(sd=False, array=True,synth_beam = [bmaj,bmin])
-
+    
     data.observatory = observatory1
 
 
