@@ -50,7 +50,7 @@ def load_data_original(specPath, observation_type, bmaj, bmin, rmsInp):
     min_separation = resolution * ckm / np.amax(freq_arr) #minimum separation between peaks in km/s
 
     #setting telescope parameters
-    print(observation_type)
+    #print(observation_type)
     if observation_type == '1':
         observatory1 = Observatory(sd=True, dish=bmaj)
     else:

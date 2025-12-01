@@ -712,7 +712,8 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
 
             # Create PDF to save all peaks
             # Create PDF to save all peaks
-            pdf_filename = os.path.join(directory_path,f"{label}_peaks.pdf")  # m is your molecule name
+            save_label = label.replace('/','_')
+            pdf_filename = os.path.join(directory_path,f"{save_label}_peaks.pdf")  # m is your molecule name
             with PdfPages(pdf_filename) as pdf:
                 n_peaks = len(peak_freqs2)
                 n_cols = 3
