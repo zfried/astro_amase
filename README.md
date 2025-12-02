@@ -241,7 +241,7 @@ This generates `{molecule_name}_peaks.pdf` files containing:
 ### Accessing Detailed Results
 
 ```python
-results = astro_amase.assign_observations('config.yaml')
+results = astro_amase.assign_observations(...)
 
 # Get the assigner object
 assigner = results['assigner']
