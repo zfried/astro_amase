@@ -834,7 +834,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
 
 
-def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range, resolution):
+def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range, resolution, dv_value_freq_og):
     """
     Execute complete spectral fitting workflow with quality control and visualization.
     
@@ -1131,15 +1131,19 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                     #print(integral_sim)
                     #print(integral_obs)
                     #print(integral_sim-integral_obs)
-                    if (integral_obs/integral_sim) <= 0.3:
+                    if (integral_obs/integral_sim) <= 0.30:
                         missingCount += 1
 
                 #print('missing count')
                 #print(missingCount)
                 #print(missingCount/len(peak_freqs_filtered))
 
-                if missingCount/len(peak_freqs_filtered) >= 0.2:
+                if missingCount/len(peak_freqs_filtered) > 0.2 and max(individual_contributions[i]) < 10*rms:
                     delMols.append(i)
+                    #print('deleting')
+                    #print(i)
+                    #print(missingCount/len(peak_freqs_filtered))
+                    
 
 
 

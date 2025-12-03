@@ -78,6 +78,27 @@ def assign_observations(
             ensures at least 2 copies of formaldehyde are maintained in the detected 
             list throughout iteration). This influences structural relevance calculations.
             Default: None (no known molecules)
+        - column_density_range: list or floats, optional
+            Minimum and maximum column density bounds for fitting.
+            Format is [min, max]. Default: [1.e10, 1.e20]
+        - peak_df: str, optional
+            Path to csv file that contains peak information 
+            Used if the user wants to input peak frequencies/intensities 
+            instead of having code determine them.
+            Must have a column titled 'frequency' and a column titled 'intensity'
+            Default: None
+        - peak_df_3sigma: str, optional
+            Path to csv file that contains 3 sigma peaks in data
+            Used for intensity analysis. Recommended to input if inputting optional
+            peak_df parameter as well. 
+            Must have a column titled 'frequency' and a column titled 'intensity'
+            Default: None
+        - vlsr_range: list, optional
+            Minimum and maximum possible vlsr values to consider during fit.
+            Format is [min,max]. Default: [-250, 250]
+        - vlsr_mols: list, optional
+            List of molecules from the notebook/vlsr_molecules.csv file to use to determine temperature and vlsr
+            Default: all molecules in .csv file
     
     Returns
     -------
@@ -279,20 +300,7 @@ def get_linewidth(
         sigma_threshold, data, rms_noise
     )
 
-    '''
-        peak_data = load_data_get_peaks(
-        user_outputs['spectrum_path'],
-        user_outputs['sigma_threshold'],
-        dv_value_freq,
-        user_outputs['observation_type'],
-        user_outputs['bmaj_or_dish'],
-        user_outputs['bmin'],
-        user_outputs['rms_noise'],
-        user_outputs['peak_df'],
-        user_outputs['peak_df_3sigma']
-    )
-    '''
-    
+ 
     # Get or calculate RMS
     if rms_noise is None:
         # Load peaks to get calculated RMS
@@ -327,6 +335,7 @@ def get_source_parameters(
     beam_major_axis: Optional[float] = None,
     beam_minor_axis: Optional[float] = None,
     vlsr_range: Optional[List[float]] = None,
+    vlsr_mols: Optional[str] = 'all'
 ) -> Dict[str, Any]:
     """
     Determine source parameters (linewidth, VLSR, temperature) without full assignment.
@@ -461,7 +470,7 @@ def get_source_parameters(
     
     # Determine linewidth
     print("Determining linewidth...")
-    dv_kms, dv_mhz, consider_hyperfine = find_linewidth(
+    dv_kms, dv_mhz, consider_hyperfine, dv_value_freq_og = find_linewidth(
         freq_arr, int_arr, resolution,
         sigma_threshold, data, rms_noise
     )
@@ -489,7 +498,7 @@ def get_source_parameters(
             vlsr_known, vlsr, temperature_is_exact, temperature,
             directory_path, freq_arr, int_arr, resolution,
             dv_mhz, data, consider_hyperfine, min_separation,
-            dv_kms, ll0, ul0, continuum_temperature, rms_original, bandwidth, source_size, vlsr_range
+            dv_kms, ll0, ul0, continuum_temperature, rms_original, bandwidth, source_size, vlsr_range, vlsr_mols
         )
         
         print(f"\nDetermined VLSR: {best_vlsr:.2f} km/s")
@@ -570,6 +579,10 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Path to csv file that contains peak information (optional)
         - peak_df_3sigma: str, optional
             Path to csv file that contains 3 sigma peaks in data (optional)
+        - vlsr_range: list
+            Minimum and maximum possible vlsr values to consider during fit.
+        - vlsr_mols: list
+            List of molecules from the notebook/vlsr_molecules.csv file to use to determine temperature and vlsr
     Returns
     -------
     results : dict
@@ -661,7 +674,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     
     # Determine linewidth
     print("\n=== Determining Linewidth ===")
-    dv_value, dv_value_freq, consider_hyperfine = find_linewidth(
+    dv_value, dv_value_freq, consider_hyperfine, dv_value_freq_og = find_linewidth(
         freq_arr, int_arr, resolution,
         user_outputs['sigma_threshold'],
         data, user_outputs['rms_noise']
@@ -685,7 +698,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             rms_original,
             bandwidth,
             user_outputs['source_size'],
-            user_outputs['vlsr_range']
+            user_outputs['vlsr_range'],
+            user_outputs['vlsr_mols']
 
         )
     else:
@@ -757,7 +771,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og
     )
 
     fit_time = time.perf_counter()
@@ -878,6 +892,10 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         - vlsr_range: list, optional
             Minimum and maximum possible vlsr values to consider during fit.
             Format is [min,max]. Default: [-250, 250]
+        - vlsr_mols: list, optional
+            List of molecules from the notebook/vlsr_molecules.csv file to use to determine temperature and vlsr.
+            Default: all molecules in .csv file
+    
     Returns
     -------
     params : dict
@@ -948,7 +966,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'column_density_range': kwargs.get('column_density_range', [1.e10, 1.e20]),
         'peak_df':kwargs.get('peak_df', None),
         'peak_df_3sigma':kwargs.get('peak_df_3sigma',None),
-        'vlsr_range':kwargs.get('vlsr_range', [-250,250])
+        'vlsr_range':kwargs.get('vlsr_range', [-250,250]),
+        'vlsr_mols': kwargs.get('vlsr_mols', 'all')
     }
     
     # Handle beam parameters based on observation type

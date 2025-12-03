@@ -310,7 +310,7 @@ def residuals_knowTemp(params, mol_list, y_exp, dv_value, ll0, ul0, data, tempIn
     y_sim = simulate_sum_knowTemp(params, mol_list, dv_value, ll0, ul0, data, tempInput, cont_obj)
     return y_sim - y_exp
 
-def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, int_arr, resolution, dv_value_freq, data, consider_hyperfine, min_separation, dv_value,ll0,ul0, cont_temp, rms_original, bandwidth, source_size, vlsr_range):
+def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, int_arr, resolution, dv_value_freq, data, consider_hyperfine, min_separation, dv_value,ll0,ul0, cont_temp, rms_original, bandwidth, source_size, vlsr_range, vlsr_mols):
     """
     Determine source velocity (VLSR) and excitation temperature through spectral fitting of common molecules.
     
@@ -451,7 +451,9 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
 
 
         center_freq = np.median(freq_arr)
+        #min_freq_threshold = min(vlsr_range)*(max(freq_arr)/300000) #calculating approximately the maximum vlsr threshold in frequency
         #freq_threshold = 250*(center_freq/300000) #frequency threshold to allow for up to 250 km/s vlsr
+        #max_freq_threshold = max(vlsr_range)*(max(freq_arr)/300000) #calculating approximately the maximum vlsr threshold in frequency
         min_freq_threshold = min(vlsr_range)*(center_freq/300000) #calculating approximately the maximum vlsr threshold in frequency
         max_freq_threshold = max(vlsr_range)*(center_freq/300000) #calculating approximately the maximum vlsr threshold in frequency
         #print('Frequency Threshold (MHz):', freq_threshold)
@@ -473,48 +475,99 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
         #print('Sorted Peak Frequencies:')
         #print(sorted_peak_freqs)
 
-        for i in range(len(sorted_peak_freqs)): #loop through all determined peaks
-            line_mols = []
-            start_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + min_freq_threshold, side="left") #start index in uploaded database for candidates within specified vlsr range
-            end_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + max_freq_threshold, side="right") #end index in uploaded database for candidates within specified vlsr range
-            for match_idx in range(start_idx, end_idx):
-                match_tu = (
-                database_names[match_idx], database_forms[match_idx], database_smiles[match_idx], database_freqs[match_idx],
-                database_errs[match_idx], database_isos[match_idx], database_tags[match_idx], database_lists[match_idx],
-                database_vibs[match_idx],database_logints[match_idx]) #tuple of matched molecule data
-                if (database_names[match_idx], database_lists[match_idx]) not in molDict:
-                    if database_lists[match_idx] == 'CDMS': #upload CDMS molecule and load into molsim object
-                        molPath = os.path.join(direc, 'cdms_pkl', f"{database_tags[match_idx]:06d}.pkl")
-                        with open(molPath, 'rb') as md:
-                            mol = pickle.load(md)
-                    molDict[(database_names[match_idx], database_lists[match_idx])] = mol #add molecule to molDict
-                    if database_names[match_idx] in parentDict: #if the molecule is an isotopologue, add the parent molecule to molDict too
-                        for pa in parentDict[database_names[match_idx]]:
-                            if (pa[0],'CDMS') not in molDict:
-                                molPath = os.path.join(direc, 'cdms_pkl', f"{pa[1]:06d}.pkl")
+        if vlsr_mols != 'all':
+            vlsr_mols = set(vlsr_mols)
+
+
+        if vlsr_mols == 'all':
+            for i in range(len(sorted_peak_freqs)): #loop through all determined peaks
+                line_mols = []
+                start_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + min_freq_threshold, side="left") #start index in uploaded database for candidates within specified vlsr range
+                end_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + max_freq_threshold, side="right") #end index in uploaded database for candidates within specified vlsr range
+                for match_idx in range(start_idx, end_idx):
+                    match_tu = (
+                    database_names[match_idx], database_forms[match_idx], database_smiles[match_idx], database_freqs[match_idx],
+                    database_errs[match_idx], database_isos[match_idx], database_tags[match_idx], database_lists[match_idx],
+                    database_vibs[match_idx],database_logints[match_idx]) #tuple of matched molecule data
+                    if (database_names[match_idx], database_lists[match_idx]) not in molDict:
+                        if database_lists[match_idx] == 'CDMS': #upload CDMS molecule and load into molsim object
+                            molPath = os.path.join(direc, 'cdms_pkl', f"{database_tags[match_idx]:06d}.pkl")
+                            with open(molPath, 'rb') as md:
+                                mol = pickle.load(md)
+                        molDict[(database_names[match_idx], database_lists[match_idx])] = mol #add molecule to molDict
+                        if database_names[match_idx] in parentDict: #if the molecule is an isotopologue, add the parent molecule to molDict too
+                            for pa in parentDict[database_names[match_idx]]:
+                                if (pa[0],'CDMS') not in molDict:
+                                    molPath = os.path.join(direc, 'cdms_pkl', f"{pa[1]:06d}.pkl")
+                                    with open(molPath, 'rb') as md:
+                                        mol = pickle.load(md)
+                                    molDict[(pa[0],'CDMS')] = mol   
+                                    #allNames.append(pa)
+                    
+                    #consider_hyperfine = False
+                    #only consider strong lines with logint in .cat file > -5.1 (determined through some testing)
+                    #print(match_tu)
+                    if consider_hyperfine == True:
+                        if match_tu[-1] > -5.1:
+                            line_mols.append(match_tu)
+                    else:
+                        if match_tu[6] < 200000:  # Exclude hyperfine lines
+                            #if 'SO, a 1Î\x94, v = 0, 1' not in match_tu[0] and 'c-C3H2' not in match_tu[0] and 'CH3OCHO' not in match_tu[0] and 'c-CC13CH2' not in match_tu[0]: #'CH3OCHO' not in match_tu[0] and 
+                            rule_out_var = False
+                            for igm in igMols: #excluding problematic molecules for quality control
+                                if igm in match_tu[0]:
+                                    rule_out_var = True
+                            if rule_out_var == False:
+                                if match_tu[-1] > -5.1 and match_tu not in line_mols:
+                                    line_mols.append(match_tu)
+
+                allCans.append(line_mols) #store all candidates for each peak frequency within 250 km/s
+
+
+        else:
+            for i in range(len(sorted_peak_freqs)): #loop through all determined peaks
+                line_mols = []
+                start_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + min_freq_threshold, side="left") #start index in uploaded database for candidates within specified vlsr range
+                end_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + max_freq_threshold, side="right") #end index in uploaded database for candidates within specified vlsr range
+                for match_idx in range(start_idx, end_idx):
+                    if database_names[match_idx] in vlsr_mols:
+                        match_tu = (
+                        database_names[match_idx], database_forms[match_idx], database_smiles[match_idx], database_freqs[match_idx],
+                        database_errs[match_idx], database_isos[match_idx], database_tags[match_idx], database_lists[match_idx],
+                        database_vibs[match_idx],database_logints[match_idx]) #tuple of matched molecule data
+                        if (database_names[match_idx], database_lists[match_idx]) not in molDict:
+                            if database_lists[match_idx] == 'CDMS': #upload CDMS molecule and load into molsim object
+                                molPath = os.path.join(direc, 'cdms_pkl', f"{database_tags[match_idx]:06d}.pkl")
                                 with open(molPath, 'rb') as md:
                                     mol = pickle.load(md)
-                                molDict[(pa[0],'CDMS')] = mol   
-                                #allNames.append(pa)
-                
-                #consider_hyperfine = False
-                #only consider strong lines with logint in .cat file > -5.1 (determined through some testing)
-                #print(match_tu)
-                if consider_hyperfine == True:
-                    if match_tu[-1] > -5.1:
-                        line_mols.append(match_tu)
-                else:
-                    if match_tu[6] < 200000:  # Exclude hyperfine lines
-                        #if 'SO, a 1Î\x94, v = 0, 1' not in match_tu[0] and 'c-C3H2' not in match_tu[0] and 'CH3OCHO' not in match_tu[0] and 'c-CC13CH2' not in match_tu[0]: #'CH3OCHO' not in match_tu[0] and 
-                        rule_out_var = False
-                        for igm in igMols: #excluding problematic molecules for quality control
-                            if igm in match_tu[0]:
-                                rule_out_var = True
-                        if rule_out_var == False:
-                            if match_tu[-1] > -5.1 and match_tu not in line_mols:
+                            molDict[(database_names[match_idx], database_lists[match_idx])] = mol #add molecule to molDict
+                            if database_names[match_idx] in parentDict: #if the molecule is an isotopologue, add the parent molecule to molDict too
+                                for pa in parentDict[database_names[match_idx]]:
+                                    if (pa[0],'CDMS') not in molDict:
+                                        molPath = os.path.join(direc, 'cdms_pkl', f"{pa[1]:06d}.pkl")
+                                        with open(molPath, 'rb') as md:
+                                            mol = pickle.load(md)
+                                        molDict[(pa[0],'CDMS')] = mol   
+                                        #allNames.append(pa)
+                        
+                        #consider_hyperfine = False
+                        #only consider strong lines with logint in .cat file > -5.1 (determined through some testing)
+                        #print(match_tu)
+                        if consider_hyperfine == True:
+                            if match_tu[-1] > -5.1:
                                 line_mols.append(match_tu)
+                        else:
+                            if match_tu[6] < 200000:  # Exclude hyperfine lines
+                                #if 'SO, a 1Î\x94, v = 0, 1' not in match_tu[0] and 'c-C3H2' not in match_tu[0] and 'CH3OCHO' not in match_tu[0] and 'c-CC13CH2' not in match_tu[0]: #'CH3OCHO' not in match_tu[0] and 
+                                rule_out_var = False
+                                for igm in igMols: #excluding problematic molecules for quality control
+                                    if igm in match_tu[0]:
+                                        rule_out_var = True
+                                if rule_out_var == False:
+                                    if match_tu[-1] > -5.1 and match_tu not in line_mols:
+                                        line_mols.append(match_tu)
 
-            allCans.append(line_mols) #store all candidates for each peak frequency within 250 km/s
+                allCans.append(line_mols) #store all candidates for each peak frequency within 250 km/s
 
         #print('all cans')
         #for g in allCans:

@@ -1,0 +1,54 @@
+vlsr_molecules
+H2CO
+"CH3OH, vt = 0 - 2"
+"CH318OH, vt le 2"
+HDCO
+H2C18O
+N18O
+H213CO
+"NO, v = 0"
+H2CCO v = 0
+H2C17O
+"SO2, v = 0"
+"13CH3OH, vt = 0, 1"
+"CH3OCHO vt=0,1"
+"HC5N, v = 0"
+CH2DCN
+HDS
+15NH3
+"DC3N, v = 0"
+"H13CCCN, v = 0"
+"HC13CCN, v = 0"
+"HCC13CN, v = 0"
+"HC3N, (0,0,0,0)"
+S18O
+18OCS
+OC34S
+O13CS
+"OCS, v = 0"
+34SO
+"SO, v = 0"
+"NH3, v = 0"
+"CH3CCH, v = 0"
+"13CH3CN, v = 0"
+"CH313CN, v = 0"
+"CH3CN, v = 0"
+H234S
+H2S
+"SiO, v = 0 - 10"
+"13CS, v = 0, 1"
+"CS, v = 0 - 4"
+"C34S, v = 0, 1"
+DCO+
+"DCN, v = 0"
+"H13CN, v = 0"
+H13CO+
+"HCN, v = 0"
+"HCO+, v = 0"
+"HNC, v = 0"
+D2S
+"N2H+, v = 0"
+C18O
+13CO
+"CO, v = 0"
+C+

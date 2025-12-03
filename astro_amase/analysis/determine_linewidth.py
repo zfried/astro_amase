@@ -303,8 +303,10 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
 
     if fwhmAttempt2 < 0.15: #if the frequency linewidth is less than 0.15 MHz, we set the dv_value_freq to 0.15 so that its not too narrow
         dv_value_freq = 0.15
+        dv_value_freq_og = fwhmAttempt2
     else:
         dv_value_freq = fwhmAttempt2
+        dv_value_freq_og = fwhmAttempt2
 
     print('Frequency Linewidth (MHz)')
     print(round(dv_value_freq,2))
@@ -313,7 +315,7 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
     if dv_value_freq < 1:
         consider_hyperfine = True
 
-    return dv_value, dv_value_freq, consider_hyperfine
+    return dv_value, dv_value_freq, consider_hyperfine, dv_value_freq_og
 
 
 def find_linewidth_standalone(freq_arr, int_arr, resolution, sigOG, data, rmsInp):  
