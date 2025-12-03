@@ -1085,6 +1085,10 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
     #print(all_carriers)
 
+    '''
+    Removing molecules if only assigned to one blended line and is less than 40% of its strength
+    '''
+
     for de in all_carriers:
         if all_carriers[de] == 0 and all_carriers[de] not in force_include_mols:
             delMols.append(de)
@@ -1092,6 +1096,9 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     #print('original del mols')
     #print(delMols)
 
+    '''
+    Removing molecules if too many lines are missing.
+    '''
 
     for i in labels:
         if i not in delMols:
@@ -1131,17 +1138,15 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                 #print(missingCount)
                 #print(missingCount/len(peak_freqs_filtered))
 
-                for g in range(10):
-                    print('')
-
                 if missingCount/len(peak_freqs_filtered) >= 0.2:
-                    print('DELETING')
                     delMols.append(i)
 
 
 
 
-
+    '''
+    Removing molecules if their contribution is too low.
+    '''
     for i in range(len(labels)):
         maxInt = max(cont_array[i])
         if maxInt <= 2.5*rms:
