@@ -269,8 +269,8 @@ def get_linewidth(
         bmin = beam_minor_axis
     
     # Load data
-    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth = load_data_original(
-        spectrum_path, obs_type, bmaj_or_dish, bmin
+    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth, rms_original = load_data_original(
+        spectrum_path, obs_type, bmaj_or_dish, bmin, rms_noise
     )
     
     # Determine linewidth
@@ -278,13 +278,27 @@ def get_linewidth(
         freq_arr, int_arr, resolution,
         sigma_threshold, data, rms_noise
     )
+
+    '''
+        peak_data = load_data_get_peaks(
+        user_outputs['spectrum_path'],
+        user_outputs['sigma_threshold'],
+        dv_value_freq,
+        user_outputs['observation_type'],
+        user_outputs['bmaj_or_dish'],
+        user_outputs['bmin'],
+        user_outputs['rms_noise'],
+        user_outputs['peak_df'],
+        user_outputs['peak_df_3sigma']
+    )
+    '''
     
     # Get or calculate RMS
     if rms_noise is None:
         # Load peaks to get calculated RMS
         peak_data = load_data_get_peaks(
             spectrum_path, sigma_threshold, dv_mhz,
-            obs_type, bmaj_or_dish, bmin, rms_noise
+            obs_type, bmaj_or_dish, bmin, rms_noise, None, None
         )
         rms = peak_data['rms']
     else:
@@ -428,9 +442,20 @@ def get_source_parameters(
     print("\n=== Determining Source Parameters ===")
     
     # Load data
+
+    '''
+    
+        data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth, rms_original = load_data_original(
+        user_outputs['spectrum_path'],
+        user_outputs['observation_type'],
+        user_outputs['bmaj_or_dish'],
+        user_outputs['bmin'],
+        user_outputs['rms_noise'],
+    )'''
+
     print("Loading spectrum...")
-    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth = load_data_original(
-        spectrum_path, obs_type, bmaj_or_dish, bmin
+    data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth, rms_original = load_data_original(
+        spectrum_path, obs_type, bmaj_or_dish, bmin, rms_noise
     )
     
     # Determine linewidth
@@ -445,7 +470,7 @@ def get_source_parameters(
     if rms_noise is None:
         peak_data = load_data_get_peaks(
             spectrum_path, sigma_threshold, dv_mhz,
-            obs_type, bmaj_or_dish, bmin, rms_noise
+            obs_type, bmaj_or_dish, bmin, rms_noise, None, None
         )
         rms = peak_data['rms']
     else:
@@ -463,7 +488,7 @@ def get_source_parameters(
             vlsr_known, vlsr, temperature_is_exact, temperature,
             directory_path, freq_arr, int_arr, resolution,
             dv_mhz, data, consider_hyperfine, min_separation,
-            dv_kms, ll0, ul0, continuum_temperature, rms_noise, bandwidth, source_size, vlsr_range
+            dv_kms, ll0, ul0, continuum_temperature, rms_original, bandwidth, source_size, vlsr_range
         )
         
         print(f"\nDetermined VLSR: {best_vlsr:.2f} km/s")
