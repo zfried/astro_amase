@@ -310,7 +310,7 @@ def residuals_knowTemp(params, mol_list, y_exp, dv_value, ll0, ul0, data, tempIn
     y_sim = simulate_sum_knowTemp(params, mol_list, dv_value, ll0, ul0, data, tempInput, cont_obj)
     return y_sim - y_exp
 
-def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, int_arr, resolution, dv_value_freq, data, consider_hyperfine, min_separation, dv_value,ll0,ul0, cont_temp, rms_original, bandwidth, source_size):
+def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, int_arr, resolution, dv_value_freq, data, consider_hyperfine, min_separation, dv_value,ll0,ul0, cont_temp, rms_original, bandwidth, source_size, vlsr_range):
     """
     Determine source velocity (VLSR) and excitation temperature through spectral fitting of common molecules.
     
@@ -451,7 +451,9 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
 
 
         center_freq = np.median(freq_arr)
-        freq_threshold = 250*(center_freq/300000) #frequency threshold to allow for up to 250 km/s vlsr
+        min_freq_threshold = min(vlsr_range)*(center_freq/300000) #calculating approximately the maximum vlsr threshold in frequency
+        #freq_threshold = 250*(center_freq/300000) #frequency threshold to allow for up to 250 km/s vlsr
+        max_freq_threshold = max(vlsr_range)*(center_freq/300000) #calculating approximately the maximum vlsr threshold in frequency
         #print('Frequency Threshold (MHz):', freq_threshold)
         molDict = {}
         allCans = []
@@ -473,8 +475,8 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
 
         for i in range(len(sorted_peak_freqs)): #loop through all determined peaks
             line_mols = []
-            start_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] - freq_threshold, side="left") #start index in uploaded database for candidates within 250 km/s
-            end_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + freq_threshold, side="right") #end index in uploaded database for candidates within 250 km/s
+            start_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + min_freq_threshold, side="left") #start index in uploaded database for candidates within specified vlsr range
+            end_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + max_freq_threshold, side="right") #end index in uploaded database for candidates within specified vlsr range
             for match_idx in range(start_idx, end_idx):
                 match_tu = (
                 database_names[match_idx], database_forms[match_idx], database_smiles[match_idx], database_freqs[match_idx],

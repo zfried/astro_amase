@@ -45,8 +45,8 @@ from scipy.optimize import least_squares
 from scipy.interpolate import interp1d, PchipInterpolator
 import gc
 from ..utils.molsim_classes import Source, Simulation
-from ..constants import global_thresh, ckm
-from ..utils.molsim_utils import find_peaks
+from ..constants import global_thresh
+
 
 
 
@@ -834,7 +834,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
 
 
-def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range, resolution):
+def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range):
     """
     Execute complete spectral fitting workflow with quality control and visualization.
     
@@ -1091,56 +1091,6 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
         
     #print('original del mols')
     #print(delMols)
-
-
-    for i in labels:
-        if i not in delMols:
-            indiv_intensity = individual_contributions[i]
-            peak_indicesIndiv = find_peaks(freqs, indiv_intensity, res=resolution, min_sep=max(resolution * ckm / np.amax(freqs),0.5*dv_value_freq), is_sim=True)
-            peak_freqs_full = freqs[peak_indicesIndiv]
-            peak_ints_full = abs(indiv_intensity[peak_indicesIndiv])
-            #print(i)
-            #print(peak_freqs_full)
-            #print(peak_ints_full)
-            mask = peak_ints_full > 2*rms
-            peak_freqs_filtered = peak_freqs_full[mask]
-            peak_ints_filtered = peak_ints_full[mask]
-            missingCount = 0
-            if len(peak_freqs_filtered) > 0:
-                for z in range(len(peak_freqs_filtered)):
-                    # Find indices within the frequency window
-                    freq_window = (freqs >= peak_freqs_filtered[z] - 0.5*dv_value_freq) & \
-                                (freqs <= peak_freqs_filtered[z] + 0.5*dv_value_freq)
-                    
-                    # Get the frequency and intensity values in this window
-                    freqs_in_window = freqs[freq_window]
-                    sim_intensity_in_window = abs(indiv_intensity[freq_window])
-                    obs_intensity_in_window = abs(y_exp[freq_window])
-                    
-                    # Calculate the integral (using trapezoidal rule)
-                    integral_sim = np.trapz(sim_intensity_in_window, freqs_in_window)
-                    integral_obs = np.trapz(obs_intensity_in_window, freqs_in_window)
-                    #print(peak_freqs_filtered[z])
-                    #print(integral_sim)
-                    #print(integral_obs)
-                    #print(integral_sim-integral_obs)
-                    if (integral_obs/integral_sim) <= 0.3:
-                        missingCount += 1
-
-                #print('missing count')
-                #print(missingCount)
-                #print(missingCount/len(peak_freqs_filtered))
-
-                for g in range(10):
-                    print('')
-
-                if missingCount/len(peak_freqs_filtered) >= 0.2:
-                    print('DELETING')
-                    delMols.append(i)
-
-
-
-
 
     for i in range(len(labels)):
         maxInt = max(cont_array[i])

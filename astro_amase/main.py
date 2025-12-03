@@ -4,7 +4,7 @@ Main entry point for Astro AMASE package.
 
 import os
 import time
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional, Union, List
 
 from .config.config_handler import load_config_file, get_parameters
 from .constants import ckm
@@ -311,7 +311,8 @@ def get_source_parameters(
     dish_diameter: float = 100.0,
     source_size: float = 1.E20,
     beam_major_axis: Optional[float] = None,
-    beam_minor_axis: Optional[float] = None
+    beam_minor_axis: Optional[float] = None,
+    vlsr_range: Optional[List[float]] = None,
 ) -> Dict[str, Any]:
     """
     Determine source parameters (linewidth, VLSR, temperature) without full assignment.
@@ -389,6 +390,9 @@ def get_source_parameters(
     ...     dish_diameter=100.0
     ... )
     """
+    if vlsr_range is None:
+        vlsr_range = [-250, 250]
+
     # Standardize observation type
     if observation_type in ['single_dish', '1']:
         obs_type = '1'
@@ -459,7 +463,7 @@ def get_source_parameters(
             vlsr_known, vlsr, temperature_is_exact, temperature,
             directory_path, freq_arr, int_arr, resolution,
             dv_mhz, data, consider_hyperfine, min_separation,
-            dv_kms, ll0, ul0, continuum_temperature, rms_noise, bandwidth, source_size
+            dv_kms, ll0, ul0, continuum_temperature, rms_noise, bandwidth, source_size, vlsr_range
         )
         
         print(f"\nDetermined VLSR: {best_vlsr:.2f} km/s")
@@ -654,7 +658,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             #user_outputs['rms_noise'],
             rms_original,
             bandwidth,
-            user_outputs['source_size']
+            user_outputs['source_size'],
+            user_outputs['vlsr_range']
 
         )
     else:
@@ -726,7 +731,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range']
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution
     )
 
     fit_time = time.perf_counter()
@@ -844,6 +849,9 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             peak_df parameter as well. 
             Must have a column titled 'frequency' and a column titled 'intensity'
             Default: None
+        - vlsr_range: list, optional
+            Minimum and maximum possible vlsr values to consider during fit.
+            Format is [min,max]. Default: [-250, 250]
     Returns
     -------
     params : dict
@@ -914,6 +922,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'column_density_range': kwargs.get('column_density_range', [1.e10, 1.e20]),
         'peak_df':kwargs.get('peak_df', None),
         'peak_df_3sigma':kwargs.get('peak_df_3sigma',None),
+        'vlsr_range':kwargs.get('vlsr_range', [-250,250])
     }
     
     # Handle beam parameters based on observation type
