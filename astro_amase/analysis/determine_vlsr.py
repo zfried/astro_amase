@@ -451,8 +451,8 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
 
 
         center_freq = np.median(freq_arr)
-        min_freq_threshold = min(vlsr_range)*(center_freq/300000) #calculating approximately the maximum vlsr threshold in frequency
         #freq_threshold = 250*(center_freq/300000) #frequency threshold to allow for up to 250 km/s vlsr
+        min_freq_threshold = min(vlsr_range)*(center_freq/300000) #calculating approximately the maximum vlsr threshold in frequency
         max_freq_threshold = max(vlsr_range)*(center_freq/300000) #calculating approximately the maximum vlsr threshold in frequency
         #print('Frequency Threshold (MHz):', freq_threshold)
         molDict = {}

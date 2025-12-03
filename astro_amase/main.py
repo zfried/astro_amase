@@ -457,6 +457,7 @@ def get_source_parameters(
     data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth, rms_original = load_data_original(
         spectrum_path, obs_type, bmaj_or_dish, bmin, rms_noise
     )
+
     
     # Determine linewidth
     print("Determining linewidth...")
