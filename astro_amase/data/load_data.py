@@ -15,6 +15,7 @@ Main functionality:
 
 import numpy as np
 import pandas as pd
+import sys
 from ..constants import ckm
 from ..utils.astro_utils import find_peaks_local
 from ..utils.molsim_utils import load_obs, find_limits, get_rms
@@ -114,10 +115,14 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
         #finding all peak frequencies and intensities in the spectrum at the inputted sigma level
         if rmsInp == None:
             peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sigOG, local_rms=True, rms=rmsInp) 
+            if len(peak_indices) == 0:
+                raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
             peak_freqs = data.spectrum.frequency[peak_indices]
             peak_ints = abs(data.spectrum.Tb[peak_indices])
         else:
             peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sigOG, local_rms=False, rms=rmsInp) 
+            if len(peak_indices) == 0:
+                raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
             peak_freqs = data.spectrum.frequency[peak_indices]
             peak_ints = abs(data.spectrum.Tb[peak_indices])
 

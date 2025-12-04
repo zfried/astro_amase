@@ -35,6 +35,7 @@ import os
 import gzip
 import pickle
 import numpy as np
+import sys
 from scipy.optimize import least_squares
 from ..utils.molsim_classes import Source, Simulation, Continuum
 from ..utils.molsim_utils import find_peaks
@@ -469,6 +470,10 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
                 peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sig, local_rms=False, rms=rms_original)
                 if len(peak_indices) >= 150: #find sigma value that has at least 150 peaks
                     foundSig = True
+
+
+        if len(peak_indices) == 0:
+            raise ValueError("Error: No peaks found at 5 sigma or stronger. You need to adjust the rms noise level.")
 
         sorted_peak_freqs = data.spectrum.frequency[peak_indices]
         sorted_peak_ints = abs(data.spectrum.Tb[peak_indices])
