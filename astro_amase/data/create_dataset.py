@@ -17,7 +17,7 @@ import gzip
 import numpy as np
 import csv
 import time
-from ..constants import maxMols,ckm
+from ..constants import maxMols,ckm, vicgae_model
 from ..utils.molsim_classes import Continuum, Source, Simulation
 from ..utils.molsim_utils import find_peaks
 #import warnings
@@ -376,6 +376,8 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
     freq_threshold = 0.5* dv_value_freq 
     allScrapedMols = []
 
+    tested_smiles = {}
+
     for row in newMatrix: #loop through all observed lines in the spectrum
         sf = float(row[0])
         line_mols = []
@@ -386,7 +388,17 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
             database_names[match_idx], database_forms[match_idx], database_smiles[match_idx], database_freqs[match_idx],
             database_errs[match_idx], database_isos[match_idx], database_tags[match_idx], database_lists[match_idx],
             database_vibs[match_idx])
-            if database_names[match_idx] not in ignore_mol_list:
+
+            smi_to_test = database_smiles[match_idx]
+            if smi_to_test not in tested_smiles: #ensuring that the molecule can be properly embedded by VICGAE, otherwise ignoring
+                try: 
+                    vicgae_model.embed_smiles(database_smiles[match_idx])
+                    tested_smiles[smi_to_test] = False #no issues with embedding
+                except:
+                    tested_smiles[smi_to_test] = True #issues with embedding
+                    #print('failed embedding', database_smiles[match_idx])
+
+            if database_names[match_idx] not in ignore_mol_list and tested_smiles[smi_to_test] == False:
                 if consider_hyperfine == True:
                     line_mols.append(match_tu)
                 else:
