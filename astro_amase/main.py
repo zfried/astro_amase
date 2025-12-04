@@ -5,7 +5,7 @@ Main entry point for Astro AMASE package.
 import os
 import time
 from typing import Dict, Any, Optional, Union, List
-
+import numpy as np
 from .config.config_handler import load_config_file, get_parameters
 from .constants import ckm
 from .analysis.determine_linewidth import find_linewidth, find_linewidth_standalone
@@ -53,6 +53,8 @@ def assign_observations(
         - vlsr : float, optional
             VLSR in km/s. If not provided, will be determined automatically.
             Note: If vlsr is provided, temperature_is_exact is forced to True.
+        - linewidth: float, optional
+            linewidth in km/s. If not provided will be determined automatically.
         - sigma_threshold : float, optional
             Sigma threshold for line detection. Default: 5.0
         - rms_noise : float, optional
@@ -328,6 +330,7 @@ def get_source_parameters(
     sigma_threshold: float = 5.0,
     temperature: Optional[float] = None,
     vlsr: Optional[float] = None,
+    linewidth: Optional[float] = None,
     rms_noise: Optional[float] = None,
     continuum_temperature: float = 2.7,
     dish_diameter: float = 100.0,
@@ -360,6 +363,8 @@ def get_source_parameters(
         If vlsr is not provided, this is used as initial guess for optimization.
     vlsr : float, optional
         VLSR in km/s. If not provided, will be determined automatically.
+    linewidth: float, optional
+        Linewidth in km/s. If not provided, will be determined automatically.
     rms_noise : float, optional
         RMS noise level. If not provided, calculated automatically.
     continuum_temperature : float, optional
@@ -469,11 +474,21 @@ def get_source_parameters(
 
     
     # Determine linewidth
-    print("Determining linewidth...")
-    dv_kms, dv_mhz, consider_hyperfine, dv_value_freq_og = find_linewidth(
-        freq_arr, int_arr, resolution,
-        sigma_threshold, data, rms_noise
-    )
+    if linewidth is None:
+        print("Determining linewidth...")
+        dv_kms, dv_mhz, consider_hyperfine, dv_value_freq_og = find_linewidth(
+            freq_arr, int_arr, resolution,
+            sigma_threshold, data, rms_noise
+        )
+    else:
+        dv_kms = linewidth
+        dv_mhz = dv_kms*np.median(freq_arr)/299792.458 #calculating frequency linewidth from velocity linewidth
+        if dv_mhz < 1:
+            consider_hyperfine = True
+        else:
+            consider_hyperfine = False
+        dv_value_freq_og = dv_mhz
+    
     print(f"Linewidth: {dv_kms:.3f} km/s ({dv_mhz:.3f} MHz)")
     
     # Get or calculate RMS
@@ -564,7 +579,9 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         - vlsr_known : bool
             True if VLSR is provided, False to determine
         - vlsr_input : float or None
-            VLSR value (km/s) if known
+            VLSR value (km/s) if known. Automatically determined if None
+        - linewidth: float or None
+            linewidith (km/s). Automatically determined if None
         - source_size : float
             Source diameter (arcsec)
         - continuum_temperature : float
@@ -673,12 +690,35 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     print("=" * 40)
     
     # Determine linewidth
-    print("\n=== Determining Linewidth ===")
-    dv_value, dv_value_freq, consider_hyperfine, dv_value_freq_og = find_linewidth(
-        freq_arr, int_arr, resolution,
-        user_outputs['sigma_threshold'],
-        data, user_outputs['rms_noise']
-    )
+    
+    if user_outputs['linewidth'] is None:
+        print("\n=== Determining Linewidth ===")
+        dv_value, dv_value_freq, consider_hyperfine, dv_value_freq_og = find_linewidth(
+            freq_arr, int_arr, resolution,
+            user_outputs['sigma_threshold'],
+            data, user_outputs['rms_noise']
+        )
+
+    else:
+        dv_value = user_outputs['linewidth']
+        dv_value_freq = dv_value*np.median(freq_arr)/299792.458 #calculating frequency linewidth from velocity linewidth
+        if dv_value_freq < 0.15:
+            dv_value_freq_og = dv_value_freq
+            dv_value_freq = 0.15
+        else:
+            dv_value_freq_og = dv_value_freq
+            
+        if dv_value_freq < 1:
+            consider_hyperfine = True
+        else:
+            consider_hyperfine = False
+
+        print('\nLinewidth Inputted As:')
+        print(dv_value,'km/s')
+        print(f"{dv_value_freq_og:.3f} MHz")
+        #print(round(dv_value_freq_og,2), 'MHz')
+        
+
     
     # Determine VLSR and temperature
     print("\n=== Determining VLSR and Temperature ===")
@@ -850,6 +890,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             Default: False, but forced to True if vlsr is provided
         - vlsr : float, optional
             VLSR in km/s. If provided, temperature_is_exact is forced to True
+        - linewidth: float, optional
+            linewidth in km/s. If not provided, will be determined automatically
         - sigma_threshold : float, optional
             Detection threshold. Default: 5.0
         - observation_type : str, optional
@@ -959,6 +1001,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'rms_manual': kwargs.get('rms_noise') is not None,
         'vlsr_input': vlsr_input,
         'vlsr_known': vlsr_known,
+        'linewidth': kwargs.get('linewidth', None),
         'temperature_choice': temperature_choice,
         'force_ignore_molecules': kwargs.get('force_ignore_molecules', []),
         'force_include_molecules': kwargs.get('force_include_molecules', []),
