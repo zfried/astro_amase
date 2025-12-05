@@ -1133,15 +1133,30 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                     #print(integral_sim-integral_obs)
                     if (integral_obs/integral_sim) <= 0.30:
                         missingCount += 1
+                
+                '''
+                print(i)
+                print('missing count')
+                print(missingCount)
+                print(missingCount/len(peak_freqs_filtered))
+                print(max(individual_contributions[i]) < 10*rms)
+                print(max(individual_contributions[i])/rms)
+                print('\n\n\n')
+                '''
 
-                #print(i)
-                #print('missing count')
-                #print(missingCount)
-                #print(missingCount/len(peak_freqs_filtered))
-                #print(max(individual_contributions[i]) < 10*rms)
-                #print('\n\n\n')
+                missingDeletion = False
 
-                if missingCount/len(peak_freqs_filtered) >= 0.2 and max(individual_contributions[i]) < 10*rms:
+                if max(individual_contributions[i]) <= 3.1*rms:
+                    if missingCount/len(peak_freqs_filtered) >= 0.1:
+                        missingDeletion = True
+                if max(individual_contributions[i]) < 10*rms:
+                    if missingCount/len(peak_freqs_filtered) >= 0.2:
+                        missingDeletion = True
+
+
+
+
+                if missingDeletion == True:
                     delMols.append(i)
                     #print('deleting')
                     #print(i)
