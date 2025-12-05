@@ -1143,6 +1143,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                 print(max(individual_contributions[i])/rms)
                 print('\n\n\n')
                 '''
+                
 
                 missingDeletion = False
 
@@ -1151,6 +1152,9 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                         missingDeletion = True
                 if max(individual_contributions[i]) < 10*rms:
                     if missingCount/len(peak_freqs_filtered) >= 0.2:
+                        missingDeletion = True
+                if max(individual_contributions[i]) < 15*rms:
+                    if missingCount/len(peak_freqs_filtered) >= 0.5:
                         missingDeletion = True
 
 
