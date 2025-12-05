@@ -151,7 +151,7 @@ def show_fit_in_notebook(results, mols_to_display = ['all']):
         r = p.line(
             freqs, spec,
             line_color=base_colors[i % len(base_colors)],
-            line_width=1.2,
+            line_width=1.8,
             line_dash="dashed",
             visible=visible,
             name=mol_name
@@ -436,7 +436,7 @@ def plot_from_saved(spectrum_path, directory_path, column_density_csv, stored_js
         r = p.line(
             freqs, spec,
             line_color=base_colors[i % len(base_colors)],
-            line_width=1.2,
+            line_width=1.8,
             line_dash="dashed",
             visible=visible,
             name=mol_name

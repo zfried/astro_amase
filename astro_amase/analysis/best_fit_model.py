@@ -728,7 +728,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
         r = p.line(
             'x', 'y', source=mol_source,
             line_color=base_colors[i % len(base_colors)],
-            line_width=1.2,  # slightly thinner lines
+            line_width=1.8,  # slightly thinner lines
             line_dash="dashed",
             visible=visible,
             name=mol_name
