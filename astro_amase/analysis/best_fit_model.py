@@ -584,7 +584,7 @@ def get_individual_contributions_lookup(fitted_columns, labels, lookup_tables):
 def plot_simulation_vs_experiment_html_bokeh_compact_float32(
     y_exp, mol_list, best_columns, labels, filename, ll0, ul0, observation,
     peak_freqs, peak_intensities, temp, dv_value, vlsr_value, cont, direc, sourceSize=1.0E20,
-    peak_window=1.0, max_initial_traces=20, save_html=True
+    peak_window=1.0, max_initial_traces=0, save_html=True
 ):
     """
     Create interactive HTML visualization of fitted spectra using Bokeh.
@@ -956,6 +956,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     # Convert back to list of tuples
     assignedMols = list(result.items())
 
+    #retrieving molecule objects
     for x in assignedMols:
         if x[1] == 'CDMS':
             idx = cdms_mols.index(x[0])
@@ -997,6 +998,8 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
             else:
                 print('ignoring')
                 print(x)
+
+    #initializing column densities 
     if column_density_range[0] == 1.e10 and column_density_range[1] == 1.e20:
         first_guess = 1.e14
     else:
@@ -1004,6 +1007,8 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     initial_columns = np.full(len(mol_list), first_guess) # Initial guesses
     bounds = (np.full(len(mol_list), column_density_range[0]), np.full(len(mol_list), column_density_range[1]))
     y_exp = np.array(dataScrape.spectrum.Tb)
+
+    #first iteration of fitting
     print('Fitting iteration 1/2')
     lookup_tables, result = fit_spectrum_lookup(
         mol_list=mol_list,
@@ -1026,7 +1031,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
     fitted_columns = result.x
     fitted_spectrum = get_fitted_spectrum_lookup(fitted_columns, labels, lookup_tables)
-    individual_contributions = get_individual_contributions_lookup(fitted_columns, labels, lookup_tables)
+    individual_contributions = get_individual_contributions_lookup(fitted_columns, labels, lookup_tables) #getting individual simulated spectra
 
     cont_array = []
     for i in labels:
@@ -1037,6 +1042,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     ssd_og = np.sum((y_exp - summed_spectrum) ** 2)
     leave_one_out_ssd = []
 
+    #checking relative contribution to fit quality for each molecule
     for i in range(cont_array.shape[0]):
         spectrum_wo_i = summed_spectrum - cont_array[i]
         ssd = np.sum((y_exp - spectrum_wo_i) ** 2)
@@ -1048,7 +1054,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     freqs = dataScrape.spectrum.frequency
     y_exp = dataScrape.spectrum.Tb
 
-
+    #finding the carrier of each line
     all_carriers = {}
     for l in labels:
         all_carriers[l] = 0
@@ -1098,6 +1104,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
     '''
     Removing molecules if too many lines are missing.
+    Does this by checking whether the integral of the observations is significantly lower than the integral of the simulated spectrum. 
     '''
 
     for i in labels:
@@ -1109,7 +1116,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
             #print(i)
             #print(peak_freqs_full)
             #print(peak_ints_full)
-            mask = peak_ints_full > 2*rms
+            mask = peak_ints_full > 2*rms #get all peaks above 2 sigma
             peak_freqs_filtered = peak_freqs_full[mask]
             peak_ints_filtered = peak_ints_full[mask]
             missingCount = 0
@@ -1144,9 +1151,10 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                 print('\n\n\n')
                 '''
                 
+                
 
                 missingDeletion = False
-
+                #tiered checks of percent of missing lines based on maximum intensity
                 if max(individual_contributions[i]) <= 3.1*rms:
                     if missingCount/len(peak_freqs_filtered) >= 0.1:
                         missingDeletion = True
@@ -1159,7 +1167,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
 
 
-
+                #deleting if too many missing lines 
                 if missingDeletion == True:
                     delMols.append(i)
                     #print('deleting')
@@ -1171,7 +1179,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
 
     '''
-    Removing molecules if their contribution is too low.
+    Removing molecules if their maximum intensity is < 2.5 sigma and they don't contribute significantly
     '''
     for i in range(len(labels)):
         maxInt = max(cont_array[i])
@@ -1181,9 +1189,11 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                 if labels[i] not in force_include_mols:
                     delMols.append(labels[i])
 
+    #filtering lists of molecules and labels
     keep_mol_list = [mol_list[i] for i in range(len(mol_list)) if labels[i] not in delMols]
     keep_labels = [labels[i] for i in range(len(mol_list)) if labels[i] not in delMols]
 
+    #filtering the lookup tables and bounds
     filtered_lookup, filtered_mols, filtered_labels = filter_lookup_tables(
         lookup_tables, mol_list, labels, keep_labels
     )
@@ -1202,6 +1212,8 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     bounds_filtered = (np.full(len(filtered_labels), column_density_range[0]),
                     np.full(len(filtered_labels), column_density_range[1]))
 
+
+    #fitting a second time with the updated list of molecules
     print('Fitting iteration 2/2')
     result_filtered = least_squares(
         residuals_lookup,
@@ -1223,12 +1235,14 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     del filtered_lookup
     gc.collect()
 
+    #plotting and saving
     maxSimInts, peak_results, peak_df, _= plot_simulation_vs_experiment_html_bokeh_compact_float32(
         y_exp, filtered_mols, fitted_columns_filtered, filtered_labels, "fit_spectrum.html", ll0, ul0, dataScrape,
         actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc,
         save_html=True, peak_window = 0.5*dv_value_freq, sourceSize = sourceSize
     )
 
+    #making column density data frame
     cdDF = pd.DataFrame()
     cdDF['molecule'] = filtered_labels
     cdDF['column_density'] = fitted_columns_filtered
