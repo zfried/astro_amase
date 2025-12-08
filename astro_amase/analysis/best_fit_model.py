@@ -1137,12 +1137,12 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
             if l not in delMols:
                 if non_blended_lines[l] == 0 or num_assignments[l] <= 1:
                     if max(individual_contributions[l]) <= 3.0*rms:
-                        print(l)
-                        print(max(individual_contributions[l])/rms)
-                        print(non_blended_lines[l])
-                        print(num_assignments[l])
+                        #print(l)
+                        #print(max(individual_contributions[l])/rms)
+                        #print(non_blended_lines[l])
+                        #print(num_assignments[l])
                         delMols.append(l)
-                        print('')
+                        #print('')
 
    
     #print('original del mols')
