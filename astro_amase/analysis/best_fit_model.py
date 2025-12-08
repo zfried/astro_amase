@@ -834,7 +834,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
 
 
-def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range, resolution, dv_value_freq_og):
+def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range, resolution, dv_value_freq_og, stricter):
     """
     Execute complete spectral fitting workflow with quality control and visualization.
     
@@ -1056,8 +1056,16 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
     #finding the carrier of each line
     all_carriers = {}
+
+    non_blended_lines = {}
+    num_assignments = {}
+
     for l in labels:
         all_carriers[l] = 0
+        non_blended_lines[l] = 0
+        num_assignments[l] = 0 
+
+    
     peak_window = 0.5 * dv_value_freq
     for peak, exp_intensity_max in zip(actualFrequencies, intensities):
         idxs = np.where((freqs >= peak - peak_window) & (freqs <= peak + peak_window))[0]
@@ -1072,6 +1080,14 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
             for i, inten in enumerate(sim_intensities)
             if inten >= threshold and inten > 0
         ]
+
+        for c in carriers:
+            num_assignments[c] += 1
+
+        if len(carriers) == 1:
+            non_blended_lines[carriers[0]] += 1
+        
+
         for i, inten in enumerate(sim_intensities):
             if inten >= threshold and inten > 0:
                 if inten/exp_intensity_max > 0.4 or len(carriers) == 1:
@@ -1091,6 +1107,19 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
     #print(all_carriers)
 
+
+    '''
+    Removing molecules if their maximum intensity is < 2.5 sigma and they don't contribute significantly
+    '''
+    for i in range(len(labels)):
+        maxInt = max(cont_array[i])
+        if maxInt <= 2.5*rms:
+            diff_ssd = leave_one_out_ssd[i]-ssd_og
+            if (diff_ssd/ssd_og) < 0.1:
+                if labels[i] not in force_include_mols:
+                    delMols.append(labels[i])
+
+
     '''
     Removing molecules if only assigned to one blended line and is less than 40% of its strength
     '''
@@ -1098,7 +1127,24 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     for de in all_carriers:
         if all_carriers[de] == 0 and all_carriers[de] not in force_include_mols:
             delMols.append(de)
-        
+
+
+    '''
+    Extra strict removal policy if molecule is only in blended lines or only assigned to one line.
+    '''
+    if stricter == True:
+        for l in labels:
+            if l not in delMols:
+                if non_blended_lines[l] == 0 or num_assignments[l] <= 1:
+                    if max(individual_contributions[l]) <= 3.0*rms:
+                        print(l)
+                        print(max(individual_contributions[l])/rms)
+                        print(non_blended_lines[l])
+                        print(num_assignments[l])
+                        delMols.append(l)
+                        print('')
+
+   
     #print('original del mols')
     #print(delMols)
 
@@ -1177,19 +1223,10 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
 
 
-
-    '''
-    Removing molecules if their maximum intensity is < 2.5 sigma and they don't contribute significantly
-    '''
-    for i in range(len(labels)):
-        maxInt = max(cont_array[i])
-        if maxInt <= 2.5*rms:
-            diff_ssd = leave_one_out_ssd[i]-ssd_og
-            if (diff_ssd/ssd_og) < 0.1:
-                if labels[i] not in force_include_mols:
-                    delMols.append(labels[i])
-
     #filtering lists of molecules and labels
+
+    delMols = [i for i in delMols if i not in force_include_mols]
+
     keep_mol_list = [mol_list[i] for i in range(len(mol_list)) if labels[i] not in delMols]
     keep_labels = [labels[i] for i in range(len(mol_list)) if labels[i] not in delMols]
 

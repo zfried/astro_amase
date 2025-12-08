@@ -16,6 +16,7 @@ Main functionality:
 import numpy as np
 import pandas as pd
 import sys
+import warnings
 from ..constants import ckm
 from ..utils.astro_utils import find_peaks_local
 from ..utils.molsim_utils import load_obs, find_limits, get_rms
@@ -48,6 +49,14 @@ def load_data_original(specPath, observation_type, bmaj, bmin, rmsInp):
         resolution = freq_arr[1] - freq_arr[0]
     else:
         resolution = np.median(freq_differences)
+
+    if freq_arr[1] - freq_arr[0] < 0:
+        raise ValueError('Spectrum must be in increasing frequency order, but appears to be in decreasing order.')
+    if freq_arr[1] == freq_arr[0]:
+        warnings.warn('First two frequency values in spectrum are identical.', UserWarning)
+
+
+
     min_separation = resolution * ckm / np.amax(freq_arr) #minimum separation between peaks in km/s
 
     #setting telescope parameters

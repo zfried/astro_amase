@@ -811,7 +811,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter']
     )
 
     fit_time = time.perf_counter()
@@ -1010,7 +1010,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'peak_df':kwargs.get('peak_df', None),
         'peak_df_3sigma':kwargs.get('peak_df_3sigma',None),
         'vlsr_range':kwargs.get('vlsr_range', [-250,250]),
-        'vlsr_mols': kwargs.get('vlsr_mols', 'all')
+        'vlsr_mols': kwargs.get('vlsr_mols', 'all'),
+        'stricter': kwargs.get('stricter', False)
     }
     
     # Handle beam parameters based on observation type
