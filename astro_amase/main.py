@@ -1011,7 +1011,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'peak_df_3sigma':kwargs.get('peak_df_3sigma',None),
         'vlsr_range':kwargs.get('vlsr_range', [-250,250]),
         'vlsr_mols': kwargs.get('vlsr_mols', 'all'),
-        'stricter': kwargs.get('stricter', False)
+        'stricter': kwargs.get('stricter', False) #testing some things out with the parameter
     }
     
     # Handle beam parameters based on observation type
