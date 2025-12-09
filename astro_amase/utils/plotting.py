@@ -846,7 +846,7 @@ def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name,
         
     molecule_name : str
         Name of the molecule to simulate (must match entries in CDMS or JPL catalogs).
-        Example: 'CH3OH, vt = 0 - 2', 'HC3N, (0,0,0,0)'
+        Example: 'CH3OH, vt = 0 - 2' or 'HC3N, (0,0,0,0)'
         
     excitation_temperature : float
         Excitation temperature of the source in Kelvin. This sets the population 
