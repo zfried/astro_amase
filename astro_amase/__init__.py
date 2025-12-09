@@ -26,7 +26,7 @@ from .constants import (
     global_thresh
 )
 
-from .utils.plotting import show_fit_in_notebook, plot_from_saved, get_individual_plots
+from .utils.plotting import show_fit_in_notebook, plot_from_saved, get_individual_plots, create_interactive_vlsr_plot
 from .utils.astro_utils import find_peaks_local
 from .utils.molsim_utils import load_obs, find_limits, get_rms
 from .core.molecule_prediction import molecule_prediction
@@ -49,5 +49,6 @@ __all__ = [
     'get_rms',
     'load_obs',
     'find_limits',
-    'molecule_prediction'
+    'molecule_prediction',
+    'create_interactive_vlsr_plot'
 ]

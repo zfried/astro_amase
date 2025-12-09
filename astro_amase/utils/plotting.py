@@ -3,6 +3,8 @@ Utilities to plot the results of the fit.
 '''
 
 
+
+
 import pandas as pd
 import numpy as np
 import os
@@ -814,4 +816,258 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
         else:
             warnings.warn("Molecule " + label + " has no peaks.")
 
+
+def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name, 
+                                 excitation_temperature, linewidth, 
+                                 vlsr_min=-50, vlsr_max=50, vlsr_step=0.05,
+                                 column_density=1.E15, source_size=1.E20, 
+                                 observation_type='single_dish', dish_diameter=100, 
+                                 beam_major_axis=0.5, beam_minor_axis=0.5, 
+                                 continuum_temperature=2.7):
+    
+    """
+    Create an interactive Bokeh plot with slider control for adjusting VLSR in real-time.
+    
+    This function computes a molecular spectrum once at VLSR=0, then allows the user to 
+    interactively shift it to different velocities by dragging a slider. The frequency 
+    shift is applied using the Doppler formula without recomputing the spectrum, making 
+    updates instantaneous. The observed spectrum is plotted in black and the simulated 
+    spectrum in red.
+    
+    Parameters
+    ----------
+    spectrum_path : str
+        Path to the observed spectrum file (expected format: txt with frequency and 
+        intensity columns).
+        
+    directory_path : str
+        Path to the directory containing molecular catalog files (CDMS and JPL pkl files 
+        and CSV metadata).
+        
+    molecule_name : str
+        Name of the molecule to simulate (must match entries in CDMS or JPL catalogs).
+        Example: 'CH3OH, vt = 0 - 2', 'HC3N, (0,0,0,0)'
+        
+    excitation_temperature : float
+        Excitation temperature of the source in Kelvin. This sets the population 
+        distribution of molecular energy levels.
+        
+    linewidth : float
+        Line width (FWHM) of the molecular transitions in km/s. This represents the 
+        velocity dispersion in the source.
+        
+    vlsr_min : float, optional
+        Minimum value for the VLSR slider in km/s. Default is -50 km/s.
+        
+    vlsr_max : float, optional
+        Maximum value for the VLSR slider in km/s. Default is 50 km/s.
+        
+    vlsr_step : float, optional
+        Step size (resolution) of the VLSR slider in km/s. Smaller values provide 
+        finer control. Default is 0.05 km/s. 
+        
+    column_density : float, optional
+        Column density of the molecule in cm^-2. Default is 1.0e15 cm^-2.
+        
+    source_size : float, optional
+        Source size in arcsec^2. Default is 1.0e20 (effectively infinite, filling the 
+        beam). Use smaller values for compact sources.
+        
+    observation_type : str, optional
+        Type of observation: 'single_dish' or 'interferometric'. Default is 'single_dish'.
+        
+    dish_diameter : float, optional
+        Diameter of the single dish telescope in meters. Only used when 
+        observation_type='single_dish'. Default is 100 meters.
+        
+    beam_major_axis : float, optional
+        Major axis of the synthesized beam in arcseconds. Only used when 
+        observation_type='interferometric'. Default is 0.5 arcsec.
+        
+    beam_minor_axis : float, optional
+        Minor axis of the synthesized beam in arcseconds. Only used when 
+        observation_type='interferometric'. Default is 0.5 arcsec.
+        
+    continuum_temperature : float, optional
+        Background continuum temperature in Kelvin. Default is 2.7 K (CMB temperature).
+    
+    Returns
+    -------
+    None
+        Displays an interactive Bokeh plot in the notebook with slider control.
+    
+    Notes
+    -----
+    - The spectrum is computed only once at VLSR=0 km/s for efficiency
+    - VLSR shifts are applied using: freq_shifted = freq_ref - vlsr * freq_ref / c
+    - Updates are instantaneous since no spectral recomputation is needed
+    - Drag the slider to adjust VLSR and see the spectrum shift in real-time
+    - The column density affects spectral intensity but cannot be adjusted interactively
+      in this function (use create_interactive_vlsr_plot_2 for that capability)
+    
+    Interactive Controls
+    --------------------
+    - Slider: Drag left/right to adjust VLSR
+    - Status Display: Shows current VLSR value
+    - Bokeh Tools: Pan, zoom, reset, and save built into the plot
+    - Legend: Click items to hide/show spectra
+    
+    The function requires molecular catalog files in the specified directory:
+    - cdms_pkl/ directory with CDMS catalog pickle files
+    - jpl_pkl/ directory with JPL catalog pickle files  
+    - all_cdms_final_official.csv metadata file
+    - all_jpl_final_official.csv metadata file
+    """
+    
+    from bokeh.plotting import figure, show
+    from bokeh.models import ColumnDataSource, Slider, Div, CustomJS
+    from bokeh.layouts import column, row
+    from bokeh.io import output_notebook
+    
+    # Enable Bokeh output in notthe ebook
+    output_notebook()
+    
+    # Load all the static data
+    cdmsDirec = os.path.join(directory_path, 'cdms_pkl/')
+    cdmsFullDF = pd.read_csv(os.path.join(directory_path, 'all_cdms_final_official.csv'))
+    df_cdms = cdmsFullDF
+    cdms_mols = list(df_cdms['mol'])
+    cdms_tags = list(df_cdms['tag'])
+    jplDirec = os.path.join(directory_path, 'jpl_pkl/')
+    jplFullDF = pd.read_csv(os.path.join(directory_path, 'all_jpl_final_official.csv'))
+    df_jpl = jplFullDF
+    jpl_mols = list(df_jpl['name'])
+    jpl_tags = list(df_jpl['tag'])
+    
+    # Load observed spectrum
+    data = load_obs(spectrum_path, type='txt')
+    ll0, ul0 = find_limits(data.spectrum.frequency)
+    freq_arr = data.spectrum.frequency
+    y_exp = data.spectrum.Tb
+    
+    # Set up observatory and continuum
+    cont = Continuum(type='thermal', params=continuum_temperature)
+    
+    if observation_type == 'single_dish':
+        observatory1 = Observatory(sd=True, dish=dish_diameter)
+    else:
+        observatory1 = Observatory(sd=False, array=True, 
+                                   synth_beam=[beam_major_axis, beam_minor_axis])
+    
+    data.observatory = observatory1
+    
+    # Load molecule
+    if molecule_name in cdms_mols:
+        idx = cdms_mols.index(molecule_name)
+        tag = cdms_tags[idx]
+        tagString = f"{tag:06d}"
+        molDirec = cdmsDirec + tagString + '.pkl'
+        with open(molDirec, 'rb') as md:
+            mol = pickle.load(md)
+    elif molecule_name in jpl_mols:
+        idx = jpl_mols.index(molecule_name)
+        tag = jpl_tags[idx]
+        tagString = str(tag)
+        molDirec = jplDirec + tagString + '.pkl'
+        with open(molDirec, 'rb') as md:
+            mol = pickle.load(md)
+    else:
+        raise ValueError('Could not find molecule. Please check inputted molecule_name')
+    
+    # Compute spectrum ONCE at vlsr=0
+    src_ref = Source(
+        Tex=excitation_temperature, column=column_density, size=source_size,
+        dV=linewidth, velocity=0.0, continuum=cont
+    )
+    sim_ref = Simulation(
+        mol=mol, ll=ll0, ul=ul0, source=src_ref,
+        line_profile='Gaussian', use_obs=True, observation=data
+    )
+    spec_ref_y = np.array(sim_ref.spectrum.int_profile, dtype=np.float32)
+    spec_ref_x = freq_arr.copy()  # Reference frequency at vlsr=0
+    
+    print("Reference spectrum computed!")
+    
+    # Create ColumnDataSources
+    source_obs = ColumnDataSource(data=dict(x=freq_arr, y=y_exp))
+    source_sim = ColumnDataSource(data=dict(x=spec_ref_x, y=spec_ref_y))
+    
+    # Store reference spectrum (unshifted)
+    source_ref = ColumnDataSource(data=dict(
+        freq_ref=spec_ref_x.tolist(),
+        intensity_ref=spec_ref_y.tolist()
+    ))
+    
+    # Create the figure
+    p = figure(width=900, height=500, 
+               title=f'{molecule_name} - Interactive VLSR Adjustment',
+               x_axis_label='Frequency (MHz)',
+               y_axis_label='Intensity (K)')
+    
+    # Plot observed spectrum (black)
+    p.line('x', 'y', source=source_obs, line_width=2, color='black', 
+           alpha=0.7, legend_label='Observed')
+    
+    # Plot simulated spectrum (red)
+    p.line('x', 'y', source=source_sim, line_width=2, color='red', 
+           legend_label='Simulated (vlsr=0.00 km/s)')
+    
+    p.legend.location = "top_right"
+    p.legend.click_policy = "hide"
+    
+    # Create slider
+    slider = Slider(start=vlsr_min, end=vlsr_max, value=0.0, step=vlsr_step, 
+                    title="VLSR (km/s)", width=400)
+    
+    # Create status div
+    status_div = Div(text="<p>Drag slider to adjust VLSR. Current: 0.00 km/s</p>", width=400)
+    
+    # JavaScript callback to update plot
+    callback = CustomJS(args=dict(
+        source_ref=source_ref,
+        source_sim=source_sim,
+        slider=slider,
+        legend=p.legend[0],
+        status_div=status_div
+    ), code="""
+        // Get vlsr from slider
+        const vlsr = slider.value;
+        
+        // Speed of light in km/s
+        const ckm = 299792.458;
+        
+        // Get reference spectrum
+        const freq_ref = source_ref.data['freq_ref'];
+        const intensity_ref = source_ref.data['intensity_ref'];
+        
+        // Apply Doppler shift: freq_shifted = freq_ref - vlsr * freq_ref / ckm
+        const n = freq_ref.length;
+        const freq_shifted = new Array(n);
+        
+        for (let i = 0; i < n; i++) {
+            freq_shifted[i] = freq_ref[i] - vlsr * freq_ref[i] / ckm;
+        }
+        
+        // Update simulated spectrum
+        source_sim.data['x'] = freq_shifted;
+        source_sim.data['y'] = intensity_ref;
+        source_sim.change.emit();
+        
+        // Update legend
+        legend.items[1].label.value = 'Simulated (vlsr=' + vlsr.toFixed(2) + ' km/s)';
+        
+        // Update status
+        status_div.text = '<p style="color:green;">Drag slider to adjust VLSR. Current: ' + vlsr.toFixed(2) + ' km/s</p>';
+    """)
+    
+    # Connect slider to callback
+    slider.js_on_change('value', callback)
+    
+    # Create layout
+    controls = column(slider, status_div)
+    layout = column(controls, p)
+    
+    # Show the plot
+    show(layout)
+    print("\nDrag the slider to adjust VLSR and see the spectrum shift in real-time!")
 
