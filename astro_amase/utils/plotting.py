@@ -762,8 +762,8 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
                         qn_full_str = qn_up_str + ' - ' + qn_low_str
         
                     # Define frequency range: ±4*dv_value_freq from peak center
-                    freq_min = peak_freq - 4 * dv_value_freq
-                    freq_max = peak_freq + 4 * dv_value_freq
+                    freq_min = peak_freq - 8 * dv_value_freq
+                    freq_max = peak_freq + 8 * dv_value_freq
                     
                     # Create mask for simulated data in this frequency range
                     freq_mask_sim = (freq_sim >= freq_min) & (freq_sim <= freq_max)
