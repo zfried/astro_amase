@@ -846,7 +846,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
 
 
-def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range, resolution, dv_value_freq_og, stricter):
+def full_fit_old(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0,ul0,vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, sourceSize, column_density_range, resolution, dv_value_freq_og, stricter):
     """
     Execute complete spectral fitting workflow with quality control and visualization.
     
@@ -1137,7 +1137,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     '''
 
     for de in all_carriers:
-        if all_carriers[de] == 0 and all_carriers[de] not in force_include_mols:
+        if all_carriers[de] == 0 and de not in force_include_mols:
             delMols.append(de)
 
 
@@ -1325,3 +1325,616 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     
     return delMols, cdDF, peak_df, internal_data
 
+
+def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0, ul0, 
+             vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, 
+             sourceSize, column_density_range, resolution, dv_value_freq_og, stricter, 
+             number_iterations=2):
+    """
+    Execute complete spectral fitting workflow with quality control and visualization.
+    
+    This is the main high-level function that orchestrates the entire fitting process:
+    1. Loads molecular catalog data from CDMS and JPL databases
+    2. Performs quality control on assigned molecules (removes hyperfine duplicates, handles database priorities)
+    3. Runs initial fit with all molecules using lookup table optimization
+    4. Applies quality control filters to remove weak or insignificant contributors
+    5. Performs refined fit with filtered molecule set (repeated for number_iterations - 1 times)
+    6. Generates interactive visualization and exports results
+    
+    Quality Control Criteria:
+    - Removes molecules with peak intensity ≤ 2.5 x RMS and that contribute in a minor way to the fit quality
+    - Prioritizes CDMS entries over JPL for duplicate molecules
+    
+    Parameters
+    ----------
+    direc : str
+        Main directory containing catalog files and for output storage.
+        Expected subdirectories: 'cdms_pkl/', 'jpl_pkl/'
+        Expected catalog files: 'all_cdms_final_official.csv', 'all_jpl_final_official.csv'
+    dataScrape : Observation
+        molsim Observation object containing observational spectrum and frequency grid.
+    tempInput : float
+        Excitation temperature (K) for molecular transitions.
+    dv_value : float
+        Line width (km/s) for Gaussian line profiles.
+    ll0 : float
+        Lower frequency bound array (MHz) for fitting range.
+    ul0 : float
+        Upper frequency bound array (MHz) for fitting range.
+    vlsr_value : float
+        Source velocity (km/s) relative to the local standard of rest.
+    actualFrequencies : array_like
+        Frequencies (MHz) of identified spectral peaks for carrier analysis.
+    intensities : array_like
+        Intensity values at peak frequencies.
+    rms : float
+        Root-mean-square noise level of the spectrum for quality filtering.
+    cont : Continuum
+        molsim Continuum background object for simulations.
+    force_include_mols : list
+        List of molecule names to always include in the fit (won't be filtered out).
+    sourceSize : float
+        Source size in arcseconds.
+    column_density_range : tuple
+        (min, max) column density bounds for fitting.
+    resolution : float
+        Spectral resolution for peak finding.
+    dv_value_freq_og : float
+        Original linewidth in frequency units (MHz).
+    stricter : bool
+        If True, applies stricter filtering criteria.
+    number_iterations : int, optional
+        Number of fitting iterations to perform. Must be >= 2. Default is 2.
+        Each iteration after the first performs molecule filtering followed by refitting.
+    
+    Returns
+    -------
+    delMols : list
+        List of molecule names that were removed during quality control
+    cdDF : DataFrame
+        Best-fit column densities and SMILES strings for retained molecules
+    peak_df : DataFrame
+        Peak identification and carrier analysis results
+    internal_data : dict
+        Dictionary containing all data needed to recreate the plot in a notebook
+    
+    Notes
+    -----
+    - Initial fit uses column density bounds specified by column_density_range
+    - Lookup tables span 30 grid points for accurate interpolation
+    - Memory cleanup performed after optimization via garbage collection
+    - number_iterations controls how many rounds of fitting occur:
+        * number_iterations=2: Initial fit → filter → final fit (default)
+        * number_iterations=3: Initial fit → filter → fit → filter → final fit
+        * etc.
+    
+    Raises
+    ------
+    ValueError
+        If number_iterations < 2
+    """
+    # Validate number_iterations
+    if number_iterations < 2:
+        raise ValueError("number_iterations must be at least 2")
+    
+    # [... All the existing initialization code stays the same ...]
+    # Lines 911-1022 from original code
+    
+    cdmsDirec = os.path.join(direc, 'cdms_pkl/')
+    cdmsFullDF = pd.read_csv(os.path.join(direc, 'all_cdms_final_official.csv'))
+    df_cdms = cdmsFullDF
+    cdmsSmiles = list(cdmsFullDF['smiles'])
+    cdmsMols = list(cdmsFullDF['mol'])
+    cdms_mols = list(df_cdms['mol'])
+    cdms_tags = list(df_cdms['tag'])
+    jplDirec = os.path.join(direc, 'jpl_pkl/')
+    jplFullDF = pd.read_csv(os.path.join(direc, 'all_jpl_final_official.csv'))
+    df_jpl = jplFullDF
+    jplSmiles = list(jplFullDF['smiles'])
+    jplMols = list(jplFullDF['name'])
+    jpl_mols = list(df_jpl['name'])
+    jpl_tags = list(df_jpl['tag'])
+    mol_list = []
+    labels = []
+    
+    assignedMols, blended_single_mols = get_assigned_molecules(assigner)
+
+    for i in force_include_mols:
+        if i in cdms_mols:
+            if (i, 'CDMS') not in assignedMols:
+                assignedMols.append((i, 'CDMS'))
+        elif i in jpl_mols:
+            if (i,'JPL') not in assignedMols:
+                assignedMols.append((i,'JPL'))
+        else:
+            warnings.warn(f"{i} was forced to be included in the fit but is not found in the CDMS or JPL databases. Please check the inputted molecule name.", UserWarning)
+    
+    blended_mols_final = []
+    # Hyperfine quality control
+    delList1 = []
+    for i in assignedMols:
+        if '[hf]' in i[0]:
+            i_clean = i[0].replace(" [hf]", "")
+            for g in assignedMols:
+                if g[0] == i_clean:
+                    delList1.append(g[0])
+
+    assignedMols = [i for i in assignedMols if i[0] not in delList1 and i[0] not in blended_mols_final]
+
+    # Quality control for duplicated entries
+    result = {}
+    for key, source in assignedMols:
+        if key not in result:
+            result[key] = source
+        else:
+            if result[key] != 'CDMS' and source == 'CDMS':
+                result[key] = source
+
+    assignedMols = list(result.items())
+
+    # Retrieving molecule objects
+    for x in assignedMols:
+        if x[1] == 'CDMS':
+            idx = cdms_mols.index(x[0])
+            tag = cdms_tags[idx]
+            tagString = f"{tag:06d}"
+            molDirec = cdmsDirec + tagString + '.pkl'
+            with open(molDirec, 'rb') as md:
+                mol = pickle.load(md)
+            mol_list.append(mol)
+            labels.append(x[0])
+        elif x[1] == 'JPL':
+            idx = jpl_mols.index(x[0])
+            tag = jpl_tags[idx]
+            tagString = str(tag)
+            molDirec = jplDirec + tagString + '.pkl'
+            with open(molDirec, 'rb') as md:
+                mol = pickle.load(md)
+            mol_list.append(mol)
+            labels.append(x[0])
+        else:
+            if x[0] in cdms_mols:
+                idx = cdms_mols.index(x[0])
+                tag = cdms_tags[idx]
+                tagString = f"{tag:06d}"
+                molDirec = cdmsDirec + tagString + '.pkl'
+                with open(molDirec, 'rb') as md:
+                    mol = pickle.load(md)
+                mol_list.append(mol)
+                labels.append(x[0])
+            elif x[0] in jpl_mols:
+                idx = jpl_mols.index(x[0])
+                tag = jpl_tags[idx]
+                tagString = str(tag)
+                molDirec = jplDirec + tagString + '.pkl'
+                with open(molDirec, 'rb') as md:
+                    mol = pickle.load(md)
+                mol_list.append(mol)
+                labels.append(x[0])
+            else:
+                print('ignoring')
+                print(x)
+
+    # Initializing column densities 
+    if column_density_range[0] == 1.e10 and column_density_range[1] == 1.e20:
+        first_guess = 1.e14
+    else:
+        first_guess = (column_density_range[0]+column_density_range[1])/2
+    initial_columns = np.full(len(mol_list), first_guess)
+    bounds = (np.full(len(mol_list), column_density_range[0]), np.full(len(mol_list), column_density_range[1]))
+    y_exp = np.array(dataScrape.spectrum.Tb)
+
+    # ========== FIRST ITERATION ==========
+    print(f'Fitting iteration 1/{number_iterations}')
+    lookup_tables, result = fit_spectrum_lookup(
+        mol_list=mol_list,
+        labels=labels,
+        initial_columns=initial_columns,
+        y_exp=y_exp,
+        bounds=bounds,
+        tempInput=tempInput,
+        dv_value=dv_value,
+        cont=cont,
+        ll0=ll0,
+        ul0=ul0,
+        dataScrape=dataScrape,
+        column_range=(column_density_range[0], column_density_range[1]),
+        n_grid_points=30,
+        vlsr_value=vlsr_value,
+        source_size=sourceSize,
+        stricter=stricter
+    )
+
+    fitted_columns = result.x
+    
+    # ========== ITERATIVE FILTERING AND FITTING ==========
+    # Track all deleted molecules across iterations
+    all_delMols = []
+    
+    for iteration in range(2, number_iterations + 1): #loop through (fitting_iterations - 1) times
+        print(f'\nFiltering molecules before iteration {iteration}/{number_iterations}')
+        
+        # Get individual contributions
+        fitted_spectrum = get_fitted_spectrum_lookup(fitted_columns, labels, lookup_tables)
+        individual_contributions = get_individual_contributions_lookup(fitted_columns, labels, lookup_tables)
+
+        cont_array = []
+        for i in labels:
+            cont_array.append(individual_contributions[i])
+
+        cont_array = np.array(cont_array)
+        summed_spectrum = np.sum(cont_array, axis=0)
+        ssd_og = np.sum((y_exp - summed_spectrum) ** 2)
+        leave_one_out_ssd = []
+
+        # Checking relative contribution to fit quality for each molecule
+        for i in range(cont_array.shape[0]):
+            spectrum_wo_i = summed_spectrum - cont_array[i]
+            ssd = np.sum((y_exp - spectrum_wo_i) ** 2)
+            leave_one_out_ssd.append(ssd)
+
+        delMols = []
+
+        #Steps to filter out incorrect assignments
+        freqs = dataScrape.spectrum.frequency
+        y_exp = dataScrape.spectrum.Tb
+
+        # Finding the carrier of each line
+        all_carriers = {}
+        non_blended_lines = {}
+        num_assignments = {}
+
+        for l in labels:
+            all_carriers[l] = 0
+            non_blended_lines[l] = 0
+            num_assignments[l] = 0 
+
+        peak_window = 0.5 * dv_value_freq
+        for peak, exp_intensity_max in zip(actualFrequencies, intensities):
+            idxs = np.where((freqs >= peak - peak_window) & (freqs <= peak + peak_window))[0]
+            if len(idxs) == 0:
+                continue
+
+            threshold = 0.2 * exp_intensity_max
+
+            sim_intensities = [np.max(individual_contributions[lbl][idxs]) for lbl in labels]
+            carriers = [
+                labels[i]
+                for i, inten in enumerate(sim_intensities)
+                if inten >= threshold and inten > 0
+            ]
+
+            for c in carriers:
+                num_assignments[c] += 1
+
+            if len(carriers) == 1:
+                non_blended_lines[carriers[0]] += 1
+
+            for i, inten in enumerate(sim_intensities):
+                if inten >= threshold and inten > 0:
+                    if inten/exp_intensity_max > 0.4 or len(carriers) == 1:
+                        all_carriers[labels[i]] = all_carriers[labels[i]] + 1
+
+        '''
+        Removing molecules if their maximum intensity is < 2.5 sigma and they don't contribute significantly
+        '''
+        for i in range(len(labels)):
+            maxInt = max(cont_array[i])
+            if maxInt <= 2.5*rms:
+                diff_ssd = leave_one_out_ssd[i]-ssd_og
+                if (diff_ssd/ssd_og) < 0.1:
+                    if labels[i] not in force_include_mols:
+                        delMols.append(labels[i])
+
+        '''
+        Removing molecules if only assigned to one blended line and is less than 40% of its strength
+        '''
+        for de in all_carriers:
+            if all_carriers[de] == 0 and de not in force_include_mols:
+                delMols.append(de)
+
+        '''
+        Extra strict removal policy if molecule is only in blended lines or only assigned to one line.
+        '''
+        if stricter == True:
+            for l in labels:
+                if l not in delMols:
+                    if non_blended_lines[l] == 0 or num_assignments[l] <= 1:
+                        if max(individual_contributions[l]) <= 3.0*rms:
+                            delMols.append(l)
+
+        '''
+        Removing molecules if too many lines are missing.
+        Does this by checking whether the integral of the observations is significantly lower than the integral of the simulated spectrum. 
+        '''
+        for i in labels:
+            if i not in delMols:
+                indiv_intensity = individual_contributions[i]
+                peak_indicesIndiv = find_peaks(freqs, indiv_intensity, res=resolution, min_sep=max(resolution * ckm / np.amax(freqs),0.5*dv_value_freq), is_sim=True)
+                peak_freqs_full = freqs[peak_indicesIndiv]
+                peak_ints_full = abs(indiv_intensity[peak_indicesIndiv])
+                mask = peak_ints_full > 2*rms #get all peaks above 2 sigma
+                peak_freqs_filtered = peak_freqs_full[mask]
+                peak_ints_filtered = peak_ints_full[mask]
+                missingCount = 0
+                if len(peak_freqs_filtered) > 0:
+                    for z in range(len(peak_freqs_filtered)):
+                        # Find indices within the frequency window
+                        freq_window = (freqs >= peak_freqs_filtered[z] - 0.5*dv_value_freq) & \
+                                    (freqs <= peak_freqs_filtered[z] + 0.5*dv_value_freq)
+                        
+                        # Get the frequency and intensity values in this window
+                        freqs_in_window = freqs[freq_window]
+                        sim_intensity_in_window = abs(indiv_intensity[freq_window])
+                        obs_intensity_in_window = abs(y_exp[freq_window])
+                        
+                        # Calculate the integral (using trapezoidal rule)
+                        integral_sim = np.trapz(sim_intensity_in_window, freqs_in_window)
+                        integral_obs = np.trapz(obs_intensity_in_window, freqs_in_window)
+                        if (integral_obs/integral_sim) <= 0.30:
+                            missingCount += 1
+
+                    missingDeletion = False
+                    #tiered checks of percent of missing lines based on maximum intensity
+                    if max(individual_contributions[i]) <= 3.1*rms:
+                        if missingCount/len(peak_freqs_filtered) >= 0.1:
+                            missingDeletion = True
+                    if max(individual_contributions[i]) < 10*rms:
+                        if missingCount/len(peak_freqs_filtered) >= 0.2:
+                            missingDeletion = True
+                    if max(individual_contributions[i]) < 15*rms:
+                        if missingCount/len(peak_freqs_filtered) >= 0.5:
+                            missingDeletion = True
+
+                    #deleting if too many missing lines 
+                    if missingDeletion == True:
+                        delMols.append(i)
+
+        # Filtering lists of molecules and labels
+        delMols = [i for i in delMols if i not in force_include_mols]
+        
+        # Track deleted molecules
+        all_delMols.extend([mol for mol in delMols if mol not in all_delMols])
+        
+        unique_delMols = list(set(delMols))
+        print(f'Removed {len(unique_delMols)} molecules in this iteration')
+        
+        # Filter molecule lists and lookup tables
+        keep_labels = [labels[i] for i in range(len(mol_list)) if labels[i] not in delMols]
+        keep_mol_list = [mol_list[i] for i in range(len(mol_list)) if labels[i] not in delMols]
+        
+        filtered_lookup, filtered_mols, filtered_labels = filter_lookup_tables(
+            lookup_tables, mol_list, labels, keep_labels
+        )
+
+        bounds_filtered = (np.full(len(filtered_labels), column_density_range[0]),
+                          np.full(len(filtered_labels), column_density_range[1]))
+
+        # Prepare initial conditions for next fit (BEFORE updating labels!)
+        initial_columns_filtered = []
+        # storing the best-fit abundances to initialize the next fit
+        for z in keep_labels:
+            idx = labels.index(z)  # Using OLD labels to index into fitted_columns
+            initial_columns_filtered.append(fitted_columns[idx])
+
+        initial_columns_filtered = np.array(initial_columns_filtered)
+
+        # Update variables for next iteration (AFTER extracting initial columns)
+        mol_list = keep_mol_list
+        labels = keep_labels
+
+        # Clean up old lookup tables
+        if iteration > 2:
+            del lookup_tables
+            gc.collect()
+        
+        lookup_tables = filtered_lookup
+
+        # ========== FIT AGAIN ==========
+        print(f'Fitting iteration {iteration}/{number_iterations}')
+        result_filtered = least_squares(
+            residuals_lookup,
+            x0=initial_columns_filtered,
+            bounds=bounds_filtered,
+            args=(filtered_labels, filtered_lookup, y_exp),
+            method='trf',
+            verbose=2,
+            ftol=1e-7
+        )
+
+        fitted_columns = result_filtered.x
+
+    # ========== CHECK IF MORE ITERATIONS NEEDED ==========
+    # Run filtering check one more time to see if molecules would still be removed
+    print(f'\nChecking if additional iterations would be beneficial...')
+    
+    fitted_spectrum = get_fitted_spectrum_lookup(fitted_columns, labels, lookup_tables)
+    individual_contributions = get_individual_contributions_lookup(fitted_columns, labels, lookup_tables)
+
+    cont_array = []
+    for i in labels:
+        cont_array.append(individual_contributions[i])
+
+    cont_array = np.array(cont_array)
+    summed_spectrum = np.sum(cont_array, axis=0)
+    ssd_og = np.sum((y_exp - summed_spectrum) ** 2)
+    leave_one_out_ssd = []
+
+    for i in range(cont_array.shape[0]):
+        spectrum_wo_i = summed_spectrum - cont_array[i]
+        ssd = np.sum((y_exp - spectrum_wo_i) ** 2)
+        leave_one_out_ssd.append(ssd)
+
+    potential_delMols = []
+
+    # ========== RUN SAME FILTERING CRITERIA ==========
+    freqs = dataScrape.spectrum.frequency
+    y_exp_check = dataScrape.spectrum.Tb
+
+    all_carriers = {}
+    non_blended_lines = {}
+    num_assignments = {}
+
+    for l in labels:
+        all_carriers[l] = 0
+        non_blended_lines[l] = 0
+        num_assignments[l] = 0 
+
+    #finding the assigned carriers of all peaks
+    peak_window = 0.5 * dv_value_freq
+    for peak, exp_intensity_max in zip(actualFrequencies, intensities):
+        idxs = np.where((freqs >= peak - peak_window) & (freqs <= peak + peak_window))[0]
+        if len(idxs) == 0:
+            continue
+
+        threshold = 0.2 * exp_intensity_max
+
+        sim_intensities = [np.max(individual_contributions[lbl][idxs]) for lbl in labels]
+        carriers = [
+            labels[i]
+            for i, inten in enumerate(sim_intensities)
+            if inten >= threshold and inten > 0
+        ]
+
+        for c in carriers:
+            num_assignments[c] += 1
+
+        if len(carriers) == 1:
+            non_blended_lines[carriers[0]] += 1
+
+        for i, inten in enumerate(sim_intensities):
+            if inten >= threshold and inten > 0:
+                if inten/exp_intensity_max > 0.4 or len(carriers) == 1:
+                    all_carriers[labels[i]] = all_carriers[labels[i]] + 1
+
+    # Remove if maximum simulated intensity is too weak (<2.5 sigma)
+    for i in range(len(labels)):
+        maxInt = max(cont_array[i])
+        if maxInt <= 2.5*rms:
+            diff_ssd = leave_one_out_ssd[i]-ssd_og
+            if (diff_ssd/ssd_og) < 0.1:
+                if labels[i] not in force_include_mols:
+                    potential_delMols.append(labels[i])
+
+    '''
+    Removing molecules if only assigned to one blended line and is less than 40% of its strength
+    '''
+    for de in all_carriers:
+        if all_carriers[de] == 0 and de not in force_include_mols:
+            potential_delMols.append(de)
+
+    '''
+    Stricter criteria if flag is True
+    '''
+    if stricter == True:
+        for l in labels:
+            if l not in potential_delMols:
+                if non_blended_lines[l] == 0 or num_assignments[l] <= 1:
+                    if max(individual_contributions[l]) <= 3.0*rms:
+                        potential_delMols.append(l)
+
+    '''
+    Finding if too many missing lines
+    '''
+    for i in labels:
+        if i not in potential_delMols:
+            indiv_intensity = individual_contributions[i]
+            peak_indicesIndiv = find_peaks(freqs, indiv_intensity, res=resolution, min_sep=max(resolution * ckm / np.amax(freqs),0.5*dv_value_freq), is_sim=True)
+            peak_freqs_full = freqs[peak_indicesIndiv]
+            peak_ints_full = abs(indiv_intensity[peak_indicesIndiv])
+            mask = peak_ints_full > 2*rms
+            peak_freqs_filtered = peak_freqs_full[mask]
+            peak_ints_filtered = peak_ints_full[mask]
+            missingCount = 0
+            if len(peak_freqs_filtered) > 0:
+                for z in range(len(peak_freqs_filtered)):
+                    freq_window = (freqs >= peak_freqs_filtered[z] - 0.5*dv_value_freq) & \
+                                (freqs <= peak_freqs_filtered[z] + 0.5*dv_value_freq)
+                    
+                    freqs_in_window = freqs[freq_window]
+                    sim_intensity_in_window = abs(indiv_intensity[freq_window])
+                    obs_intensity_in_window = abs(y_exp_check[freq_window])
+                    
+                    integral_sim = np.trapz(sim_intensity_in_window, freqs_in_window)
+                    integral_obs = np.trapz(obs_intensity_in_window, freqs_in_window)
+                    if (integral_obs/integral_sim) <= 0.30:
+                        missingCount += 1
+
+                missingDeletion = False
+                if max(individual_contributions[i]) <= 3.1*rms:
+                    if missingCount/len(peak_freqs_filtered) >= 0.1:
+                        missingDeletion = True
+                if max(individual_contributions[i]) < 10*rms:
+                    if missingCount/len(peak_freqs_filtered) >= 0.2:
+                        missingDeletion = True
+                if max(individual_contributions[i]) < 15*rms:
+                    if missingCount/len(peak_freqs_filtered) >= 0.5:
+                        missingDeletion = True
+
+                if missingDeletion == True:
+                    potential_delMols.append(i)
+
+    potential_delMols = [i for i in potential_delMols if i not in force_include_mols]
+    potential_delMols = list(dict.fromkeys(potential_delMols))  # Remove duplicates while preserving order
+
+    if len(potential_delMols) > 0:
+        warnings.warn(
+            f"\nAfter iteration {number_iterations}/{number_iterations}, {len(potential_delMols)} molecule(s) "
+            f"would still be removed by the filtering criteria: {potential_delMols}\n"
+            f"Consider increasing 'number_iterations' parameter (currently {number_iterations}) "
+            f"to {number_iterations + 1} or higher for better convergence.",
+            UserWarning
+        )
+        print(f"  Molecules that would be removed: {potential_delMols}")
+    else:
+        print(f"  No additional molecules would be removed. Fitting has converged.")
+
+    # ========== FINAL OUTPUT (after all iterations) ==========
+
+    # Free memory
+    del lookup_tables
+    gc.collect()
+
+    # Plotting and saving
+    maxSimInts, peak_results, peak_df, _ = plot_simulation_vs_experiment_html_bokeh_compact_float32(
+        y_exp, mol_list, fitted_columns, labels, "fit_spectrum.html", ll0, ul0, dataScrape,
+        actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc,
+        save_html=True, peak_window=0.5*dv_value_freq, sourceSize=sourceSize
+    )
+
+    # Make column density dataframe
+    cdDF = pd.DataFrame()
+    cdDF['molecule'] = labels
+    cdDF['column_density'] = fitted_columns
+    outputSmiles = []
+
+    for l in labels:
+        if l in cdmsMols:
+            idx = cdmsMols.index(l)
+            outputSmiles.append(cdmsSmiles[idx])
+        elif l in jplMols:
+            idx = jplMols.index(l)
+            outputSmiles.append(jplSmiles[idx])
+    cdDF['smiles'] = outputSmiles
+
+    cdDF.to_csv(os.path.join(direc, 'column_density_results.csv'), index=False)
+    
+    # Store internal data for notebook plotting
+    internal_data = {
+        'directory_path': direc,
+        'y_exp': y_exp,
+        'filtered_mols': mol_list,
+        'fitted_columns': fitted_columns,
+        'filtered_labels': labels,
+        'll0': ll0,
+        'ul0': ul0,
+        'dataScrape': dataScrape,
+        'actualFrequencies': actualFrequencies,
+        'intensities': intensities,
+        'cont': cont
+    }
+    
+    unique_all_delMols = list(set(all_delMols))
+    print(f'\nTotal molecules removed across all iterations: {len(unique_all_delMols)}')
+    
+    return all_delMols, cdDF, peak_df, internal_data

@@ -102,6 +102,12 @@ def assign_observations(
         - vlsr_mols: list, optional
             List of molecules from the notebook/vlsr_molecules.csv file to use to determine temperature and vlsr
             Default: all molecules in .csv file
+        - stricter: bool, optional
+            Optional flag to do an additional check when removing molecules from assignment.
+            Default: False
+        - fitting_iterations: int, optional
+            Number of fitting iterations to perform. Each iteration after the first applies 
+            molecule filtering followed by refitting. Minimum: 2. Default: 2
     
     Returns
     -------
@@ -601,6 +607,12 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Minimum and maximum possible vlsr values to consider during fit.
         - vlsr_mols: list
             List of molecules from the notebook/vlsr_molecules.csv file to use to determine temperature and vlsr
+        - stricter: bool, optional
+            Optional flag to do an additional check when removing molecules from assignment.
+            Default: False
+        - fitting_iterations: int, optional
+            Number of fitting iterations to perform. Each iteration after the first applies 
+            molecule filtering followed by refitting. Minimum: 2. Default: 2
     Returns
     -------
     results : dict
@@ -840,7 +852,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter']
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['fitting_iterations']
     )
 
     fit_time = time.perf_counter()
@@ -966,6 +978,14 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         - vlsr_mols: list, optional
             List of molecules from the notebook/vlsr_molecules.csv file to use to determine temperature and vlsr.
             Default: all molecules in .csv file
+        - stricter: bool, optional
+            Optional flag to do an additional check when removing molecules from assignment.
+            Default: False
+        - fitting_iterations: int, optional
+            Number of fitting iterations to perform. Each iteration after the first applies 
+            molecule filtering followed by refitting. Minimum: 2. Default: 2
+
+        
     
     Returns
     -------
@@ -1012,7 +1032,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'vlsr_mols',
         'force_ignore_molecules',
         'force_include_molecules',
-        'stricter'
+        'stricter',
+        'fitting_iterations'
     }
 
     #printing a warning if an unexpected parameter is inputted
@@ -1077,8 +1098,14 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'peak_df_3sigma':kwargs.get('peak_df_3sigma',None),
         'vlsr_range':kwargs.get('vlsr_range', [-250,250]),
         'vlsr_mols': kwargs.get('vlsr_mols', 'all'),
-        'stricter': kwargs.get('stricter', False) #testing some things out with the parameter
+        'stricter': kwargs.get('stricter', False), #testing some things out with the parameter
+        'fitting_iterations': kwargs.get('fitting_iterations',2)
     }
+
+    if params['fitting_iterations'] < 2:
+        params['fitting_iterations'] = 2
+        warnings.warn('fitting_iterations must be 2 or more. Updated it to 2.')
+
     
     # Handle beam parameters based on observation type
     if params['observation_type'] == '1':

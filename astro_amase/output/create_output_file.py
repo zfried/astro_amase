@@ -198,7 +198,8 @@ def remove_molecules_and_write_output(assignment: 'IterativeSpectrumAssignment',
     thresh = local_thresh
     
     # Step 1: Penalize molecules to be removed
-    print(f"Removing {len(molecules_to_remove)} molecules from consideration...")
+    unique_remove_list = list(set(molecules_to_remove))
+    print(f"Removing {len(unique_remove_list)} molecules from consideration...")
     
     for line in assignment.lines:
         modified = False
