@@ -669,7 +669,12 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     else:
         print(f"Inputted approximate temperature: {user_outputs['temperature']} K")
         print('Code will approximate temperature within 100 K of inputted value')
-    
+
+    if user_outputs['linewidth'] is None:
+        print('Code will determine linewidth')
+    else:
+         print(f"Linewidth: {user_outputs['linewidth']} km/s")
+
     
     print(f"VLSR known: {user_outputs['vlsr_known']}")
 
@@ -688,6 +693,29 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         print("RMS noise: Auto-calculate")
 
     print("=" * 40)
+
+    base_path = user_outputs['directory_path']
+
+    # Check required directories
+    required_dirs = ['cdms_pkl', 'jpl_pkl']
+    for dir_name in required_dirs:
+        if not os.path.isdir(os.path.join(base_path, dir_name)):
+            raise ValueError(f"Error: {dir_name} folder is not present in your directory_path. "
+                            "This needs to be downloaded from the Dropbox folder linked in the README and stored locally in directory_path.")
+
+    # Check required files
+    required_files = [
+        'all_jpl_final_official.csv',
+        'all_cdms_final_official.csv',
+        'vlsr_database_logint.pkl.gz',
+        'transitions_database.pkl.gz'
+    ]
+    for file_name in required_files:
+        if not os.path.isfile(os.path.join(base_path, file_name)):
+            raise ValueError(f"Error: {file_name} file is not present in your directory_path. "
+                            "This needs to be downloaded from the Dropbox folder linked in the README and stored locally in directory_path.")
+
+
     
     # Determine linewidth
     
