@@ -986,7 +986,7 @@ def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name,
     spec_ref_y = np.array(sim_ref.spectrum.int_profile, dtype=np.float32)
     spec_ref_x = freq_arr.copy()  # Reference frequency at vlsr=0
     
-    print("Reference spectrum computed!")
+    #print("Reference spectrum computed!")
     
     # Create ColumnDataSources
     source_obs = ColumnDataSource(data=dict(x=freq_arr, y=y_exp))
