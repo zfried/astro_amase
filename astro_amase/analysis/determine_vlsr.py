@@ -9,8 +9,7 @@ peaks are detected (to ensure robust sampling).
 3. For each detected peak:
 - Identify candidate molecular transitions within a ±250 km/s frequency window from the database.
 - Load the corresponding molecular models (and parents if applicable).
-- Apply filtering rules: only keep strong lines (logint > -4.7), exclude certain molecules
-    (e.g., CH3OCHO, problematic SO transitions), and exclude hyperfine lines unless specified.
+- Apply filtering rules: only keep strong lines (logint > -5.1), and exclude hyperfine lines unless specified.
 - For each candidate, simulate its spectrum with the appropriate VLSR needed to align it to the
     observed peak frequency.
 - Scale simulated intensities to match observed peak intensities, discard candidates that
@@ -248,6 +247,8 @@ def residuals(params, mol_list, y_exp, dv_value, ll0, ul0, data, cont_obj, sourc
     y_sim = simulate_sum(params, mol_list, dv_value, ll0, ul0, data, cont_obj, source_size)
     return y_sim - y_exp
 
+
+
 def simulate_sum_knowTemp(params, mol_list, dv_value, ll0, ul0, data, tempInput, cont_obj):
     """
     Simulates and sums spectral profiles for a list of molecules using provided parameters.
@@ -310,6 +311,9 @@ def residuals_knowTemp(params, mol_list, y_exp, dv_value, ll0, ul0, data, tempIn
     """
     y_sim = simulate_sum_knowTemp(params, mol_list, dv_value, ll0, ul0, data, tempInput, cont_obj)
     return y_sim - y_exp
+
+
+
 
 def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, int_arr, resolution, dv_value_freq, data, consider_hyperfine, min_separation, dv_value,ll0,ul0, cont_temp, rms_original, bandwidth, source_size, vlsr_range, vlsr_mols):
     """
@@ -394,7 +398,7 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
     **Candidate Selection:**
     - Searches ±250 km/s window: Δν = 250 × (ν_center/300000 MHz)
     - Loads molecules from CDMS database (with isotopologue parent handling)
-    - Filters by line strength: log(intensity) > -4.7 (strong transitions only)
+    - Filters by line strength: log(intensity) > -5.1 (strong transitions only)
     - Handles isotopologues via parentDict mapping to parent molecules
     
     **Candidate Validation:**
@@ -821,6 +825,7 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
             best_temp = tempInput
             best_vlsr = result.x[-1]
             best_columns = result.x[:-1]  # All but last are column densities
+
 
 
 
