@@ -902,6 +902,7 @@ def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name,
     - VLSR shifts are applied using: freq_shifted = freq_ref - vlsr * freq_ref / c
     - Updates are instantaneous since no spectral recomputation is needed
     - Drag the slider to adjust VLSR and see the spectrum shift in real-time
+    - The slider starts at the midpoint of vlsr_min and vlsr_max
     - The column density affects spectral intensity but cannot be adjusted interactively
       in this function (use create_interactive_vlsr_plot_2 for that capability)
     
@@ -924,7 +925,7 @@ def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name,
     from bokeh.layouts import column, row
     from bokeh.io import output_notebook
     
-    # Enable Bokeh output in notthe ebook
+    # Enable Bokeh output in the notebook
     output_notebook()
     
     # Load all the static data
@@ -986,11 +987,18 @@ def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name,
     spec_ref_y = np.array(sim_ref.spectrum.int_profile, dtype=np.float32)
     spec_ref_x = freq_arr.copy()  # Reference frequency at vlsr=0
     
+    # Calculate initial VLSR (midpoint)
+    vlsr_initial = (vlsr_min + vlsr_max) / 2.0
+    ckm = 299792.458  # Speed of light in km/s
+    
+    # Apply initial Doppler shift to start at midpoint
+    spec_initial_x = spec_ref_x - vlsr_initial * spec_ref_x / ckm
+    
     #print("Reference spectrum computed!")
     
     # Create ColumnDataSources
     source_obs = ColumnDataSource(data=dict(x=freq_arr, y=y_exp))
-    source_sim = ColumnDataSource(data=dict(x=spec_ref_x, y=spec_ref_y))
+    source_sim = ColumnDataSource(data=dict(x=spec_initial_x, y=spec_ref_y))
     
     # Store reference spectrum (unshifted)
     source_ref = ColumnDataSource(data=dict(
@@ -1008,19 +1016,19 @@ def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name,
     p.line('x', 'y', source=source_obs, line_width=2, color='black', 
            alpha=0.7, legend_label='Observed')
     
-    # Plot simulated spectrum (red)
+    # Plot simulated spectrum (red) with initial vlsr
     p.line('x', 'y', source=source_sim, line_width=2, color='red', 
-           legend_label='Simulated (vlsr=0.00 km/s)')
+           legend_label=f'Simulated (vlsr={vlsr_initial:.2f} km/s)')
     
     p.legend.location = "top_right"
     p.legend.click_policy = "hide"
     
-    # Create slider
-    slider = Slider(start=vlsr_min, end=vlsr_max, value=0.0, step=vlsr_step, 
+    # Create slider starting at midpoint
+    slider = Slider(start=vlsr_min, end=vlsr_max, value=vlsr_initial, step=vlsr_step, 
                     title="VLSR (km/s)", width=400)
     
-    # Create status div
-    status_div = Div(text="<p>Drag slider to adjust VLSR. Current: 0.00 km/s</p>", width=400)
+    # Create status div with initial vlsr
+    status_div = Div(text=f"<p>Drag slider to adjust VLSR. Current: {vlsr_initial:.2f} km/s</p>", width=400)
     
     # JavaScript callback to update plot
     callback = CustomJS(args=dict(
@@ -1069,5 +1077,5 @@ def create_interactive_vlsr_plot(spectrum_path, directory_path, molecule_name,
     
     # Show the plot
     show(layout)
-    print("\nDrag the slider to adjust VLSR and see the spectrum shift in real-time!")
-
+    print(f"\nSlider initialized at VLSR = {vlsr_initial:.2f} km/s (midpoint of range).")
+    print("Drag the slider to adjust VLSR and see the spectrum shift in real-time!")
