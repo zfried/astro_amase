@@ -6,6 +6,7 @@ import os
 import time
 from typing import Dict, Any, Optional, Union, List
 import numpy as np
+import warnings
 from .config.config_handler import load_config_file, get_parameters
 from .constants import ckm
 from .analysis.determine_linewidth import find_linewidth, find_linewidth_standalone
@@ -988,6 +989,43 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
     - If vlsr is not provided and temperature_is_exact is True:
       code will use exact temperature to determine VLSR
     """
+
+    valid_kwargs = {
+        'temperature',
+        'temperature_is_exact',
+        'vlsr',
+        'linewidth',
+        'sigma_threshold',
+        'observation_type',
+        'dish_diameter',
+        'beam_major_axis',
+        'beam_minor_axis',
+        'source_size',
+        'continuum_temperature',
+        'valid_atoms',
+        'rms_noise',
+        'known_molecules',
+        'column_density_range',
+        'peak_df',
+        'peak_df_3sigma',
+        'vlsr_range',
+        'vlsr_mols',
+        'force_ignore_molecules',
+        'force_include_molecules',
+        'stricter'
+    }
+
+    #printing a warning if an unexpected parameter is inputted
+    unexpected_kwargs = set(kwargs.keys()) - valid_kwargs
+    if unexpected_kwargs:
+        unexpected_str = ', '.join([f"{k}={repr(kwargs[k])}" for k in sorted(unexpected_kwargs)])
+        warnings.warn(
+            f"Unexpected parameter(s) provided and will be ignored: {unexpected_str}. "
+            f"Valid parameters are: {', '.join(sorted(valid_kwargs))}",
+            UserWarning
+        )
+
+
     # Check if temperature is provided
     if 'temperature' not in kwargs:
         raise ValueError("temperature parameter is required")
