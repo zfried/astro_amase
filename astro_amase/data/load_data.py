@@ -70,7 +70,7 @@ def load_data_original(specPath, observation_type, bmaj, bmin, rmsInp):
     
     bandwidth = ul0[-1] - ll0[0]
     
-    if rmsInp == None:
+    if rmsInp is None:
         rms = get_rms(int_arr)
     else:
         rms = rmsInp
@@ -112,7 +112,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
         ll0, ul0 = find_limits(data.spectrum.frequency) #determine upper and lower limits of the spectrum
         freq_arr = data.spectrum.frequency #frequency array of spectrum
         int_arr = data.spectrum.Tb #intensity array of spectrum
-        if rmsInp == None:
+        if rmsInp is None:
             rms = get_rms(int_arr)
         else:
             rms = rmsInp
@@ -122,7 +122,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
         else:
             resolution = np.median(freq_differences)
         #finding all peak frequencies and intensities in the spectrum at the inputted sigma level
-        if rmsInp == None:
+        if rmsInp is None:
             peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sigOG, local_rms=True, rms=rmsInp) 
             if len(peak_indices) == 0:
                 raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
@@ -150,7 +150,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
         print('')
 
         #storing all 3 sigma lines. Needed for future intensity checks
-        if rmsInp == None:
+        if rmsInp is None:
             peak_indices_full = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq), sigma=3.0, local_rms = False, rms=rmsInp)
             peak_freqs_full = data.spectrum.frequency[peak_indices_full]
             peak_ints_full = abs(data.spectrum.Tb[peak_indices_full])
