@@ -445,7 +445,7 @@ def filter_lookup_tables(lookup_tables, mol_list, labels, keep_labels):
 
 def fit_spectrum_lookup(mol_list, labels, initial_columns, y_exp, bounds,
                        tempInput, dv_value, cont, ll0, ul0, dataScrape,
-                       column_range=(1e10, 1e20), n_grid_points=30, vlsr_value = None, source_size = 1.E20):
+                       column_range=(1e10, 1e20), n_grid_points=30, vlsr_value = None, source_size = 1.E20, stricter = False):
     """
     Perform spectral fitting using pre-computed lookup tables and nonlinear optimization.
     
@@ -501,16 +501,28 @@ def fit_spectrum_lookup(mol_list, labels, initial_columns, y_exp, bounds,
     )
     lookup_tables = setup_interpolators(lookup_tables)
 
-    result = least_squares(
-        residuals_lookup,
-        x0=initial_columns,
-        bounds=bounds,
-        args=(labels, lookup_tables, y_exp),
-        method='trf',
-        verbose=2,
-        ftol=1e-6,
-        max_nfev=23
-    )
+    if stricter == False:
+        result = least_squares(
+            residuals_lookup,
+            x0=initial_columns,
+            bounds=bounds,
+            args=(labels, lookup_tables, y_exp),
+            method='trf',
+            verbose=2,
+            ftol=1e-6,
+            max_nfev=23
+        )
+    else:
+        result = least_squares(
+            residuals_lookup,
+            x0=initial_columns,
+            bounds=bounds,
+            args=(labels, lookup_tables, y_exp),
+            method='trf',
+            verbose=2,
+            ftol=1e-6,
+            max_nfev=30
+        )
     return lookup_tables, result
 
 def get_fitted_spectrum_lookup(fitted_columns, labels, lookup_tables):
@@ -1025,8 +1037,8 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
         column_range=(column_density_range[0], column_density_range[1]),
         n_grid_points=30,
         vlsr_value = vlsr_value,
-        source_size = sourceSize
-
+        source_size = sourceSize,
+        stricter = stricter
     )
 
     fitted_columns = result.x
