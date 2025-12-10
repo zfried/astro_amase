@@ -188,7 +188,16 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
     print('finding linewidth!')
 
     #finding the peaks in the spectrum
-    peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),1), sigma=sigOG, local_rms=True, rms=rmsInp)
+    if rmsInp is None:
+        peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 3), sigma=sigOG, local_rms=True, rms=rmsInp) 
+        if len(peak_indices) == 0:
+            raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+    else:
+        peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 3), sigma=sigOG, local_rms=False, rms=rmsInp) 
+        if len(peak_indices) == 0:
+            raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+
+    #peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),1), sigma=sigOG, local_rms=True, rms=rmsInp)
     peak_freqs = data.spectrum.frequency[peak_indices]
     peak_ints = abs(data.spectrum.Tb[peak_indices])
     
@@ -255,6 +264,44 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
             roughWidths.append(rough_fwhm/2.355) 
 
     medRoughWidth = statistics.median(roughWidths)
+    #print(medRoughWidth)
+
+    #print(roughWidths)
+    #print('')
+
+    #peak finding again with initial guess used to set minimum separation
+    if rmsInp is None:
+        peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*medRoughWidth*2.355), sigma=sigOG, local_rms=True, rms=rmsInp) 
+        if len(peak_indices) == 0:
+            raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+    else:
+        peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*medRoughWidth*2.355), sigma=sigOG, local_rms=False, rms=rmsInp) 
+        if len(peak_indices) == 0:
+            raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+
+    #peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),1), sigma=sigOG, local_rms=True, rms=rmsInp)
+    peak_freqs = data.spectrum.frequency[peak_indices]
+    peak_ints = abs(data.spectrum.Tb[peak_indices])
+    
+    delFreqs = []
+
+    peak_freqs2 = [peak_freqs[i] for i in range(len(peak_freqs)) if peak_freqs[i] not in delFreqs]
+    peak_ints2 = [peak_ints[i] for i in range(len(peak_freqs)) if peak_freqs[i] not in delFreqs]
+    peak_indices2 = [peak_indices[i] for i in range(len(peak_freqs)) if peak_freqs[i] not in delFreqs]
+    #store all peaks by from strongest-to-weakest intensity
+    combPeaks = [(peak_freqs2[i], peak_ints2[i], peak_indices2[i]) for i in range(len(peak_freqs2))]
+    scp = sortTupleArray(combPeaks)
+    scp.reverse()
+    #storing peak frequencies and intensities in separate arrays
+    peak_freqs = np.array([i[0] for i in scp])
+    peak_ints = np.array([i[1] for i in scp])
+    peak_indices = np.array([i[2] for i in scp])
+    numVals = int(50 / resolution) #calculate number of resolution units to make 50 MHz
+    allMu = []
+    alreadyMu = []
+    fwhmList = []
+
+    
 
         
 
@@ -293,10 +340,20 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
             # print('gaussian failed to converge for line at ' + str(peak_freqs[i]) + ' MHz')
             continue
 
+    #filtering unreasonable values.
+    velList2 = [velList[i] for i in range(len(velList)) if fwhmList[i] < 7*medRoughWidth ]
+    velList = velList2
+    fwhmList = [i for i in fwhmList if i < 7*medRoughWidth]
 
+
+    #print(fwhmList)
+    #print(fwhmList)
     fwhmAttempt2 = statistics.median(fwhmList)
     print('Velocity Linewidth (km/s)')
     velMed = statistics.median(velList)
+    if rmsInp is not None:
+        fwhmAttempt2 *= 0.9 #scaling factor since ofterntimes determined value too high
+        velMed *= 0.9  #scaling factor since ofterntimes determined value too high
     print(round(velMed, 2))
 
     dv_value = velMed #storing the velocity linewidth as dv_value
