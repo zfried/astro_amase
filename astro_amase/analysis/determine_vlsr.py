@@ -724,7 +724,8 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
 
         #determining the top densest windows of +/- dV in the vlsr distribution
         top_bins = (top_k_densest_windows(total_vlsrs, window_radius=1*dv_value, top_k=50))
-        #print(top_bins)
+        if len(top_bins) == 0:
+            raise ValueError("VLSR finding failed. There are a few options to try: \n (1) You can manually input a vlsr value. If you dont know it, you can use the create_interactive_vlsr_plot function to find it visually.\n (2) You can try adjusting the rms_noise level.")
         top_scored_bins = []
         for tb in top_bins:
             if tb[0] == top_bins[0][0]:
