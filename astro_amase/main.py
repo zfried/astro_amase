@@ -107,7 +107,8 @@ def assign_observations(
             Default: False
         - fitting_iterations: int, optional
             Number of fitting iterations to perform. Each iteration after the first applies 
-            molecule filtering followed by refitting. Minimum: 2. Default: 2
+            molecule filtering followed by refitting. Set to 0 to iterate until convergence 
+            (no molecules removed). Otherwise must be 2 or greater. Default: 2
     
     Returns
     -------
@@ -612,7 +613,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Default: False
         - fitting_iterations: int, optional
             Number of fitting iterations to perform. Each iteration after the first applies 
-            molecule filtering followed by refitting. Minimum: 2. Default: 2
+            molecule filtering followed by refitting. Set to 0 to iterate until convergence 
+            (no molecules removed). Otherwise must be 2 or greater. Default: 2
     Returns
     -------
     results : dict
@@ -983,7 +985,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             Default: False
         - fitting_iterations: int, optional
             Number of fitting iterations to perform. Each iteration after the first applies 
-            molecule filtering followed by refitting. Minimum: 2. Default: 2
+            molecule filtering followed by refitting. Set to 0 to iterate until convergence 
+            (no molecules removed). Otherwise must be 2 or greater. Default: 2
 
         
     
@@ -1102,9 +1105,9 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'fitting_iterations': kwargs.get('fitting_iterations',2)
     }
 
-    if params['fitting_iterations'] < 2:
+    if params['fitting_iterations'] == 1:
         params['fitting_iterations'] = 2
-        warnings.warn('fitting_iterations must be 2 or more. Updated it to 2.')
+        warnings.warn('fitting_iterations must be either 0 or 2 or more. You inputted 1. It has been updated to 2.')
 
     
     # Handle beam parameters based on observation type
