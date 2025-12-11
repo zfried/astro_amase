@@ -1096,7 +1096,8 @@ class IterativeSpectrumAssignment:
         for mol, count in self.override_counter.items():
             if count >= min_occurrences:
                 override_mols.append(mol)
-        
+        #print('override mols')
+        #print(override_mols)
         return override_mols
     
     def assign_all_iteratively(self):
