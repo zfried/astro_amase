@@ -1664,6 +1664,7 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                 peak_freqs_filtered = peak_freqs_full[mask]
                 peak_ints_filtered = peak_ints_full[mask]
                 missingCount = 0
+                missingMaxCount = 0
                 if len(peak_freqs_filtered) > 0:
                     for z in range(len(peak_freqs_filtered)):
                         # Find indices within the frequency window
@@ -1674,12 +1675,28 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                         freqs_in_window = freqs[freq_window]
                         sim_intensity_in_window = abs(indiv_intensity[freq_window])
                         obs_intensity_in_window = abs(y_exp[freq_window])
+
+                        #max_sim_intensity_in_window = max(sim_intensity_in_window)
+                        #max_obs_intensity_in_window = max(obs_intensity_in_window)
                         
                         # Calculate the integral (using trapezoidal rule)
                         integral_sim = np.trapz(sim_intensity_in_window, freqs_in_window)
                         integral_obs = np.trapz(obs_intensity_in_window, freqs_in_window)
                         if (integral_obs/integral_sim) <= 0.30:
                             missingCount += 1
+
+                        #if max_obs_intensity_in_window/max_sim_intensity_in_window <= 0.4:
+                        #    missingMaxCount += 1
+
+
+
+                    #print(i)
+                    #print('missing count')
+                    #print(missingCount/len(peak_freqs_filtered))
+                    #print('missing max count')
+                    #print(missingMaxCount/len(peak_freqs_filtered))
+                    #print(max(individual_contributions[i])/rms)
+                    
 
                     missingDeletion = False
                     #tiered checks of percent of missing lines based on maximum intensity
@@ -1696,6 +1713,41 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                     #deleting if too many missing lines 
                     if missingDeletion == True:
                         delMols.append(i)
+
+                #now checking if there are any missing lines by maximum intensity
+                mask = peak_ints_full > 1.5*rms #get all peaks above 1.5 sigma
+                peak_freqs_filtered = peak_freqs_full[mask]
+                peak_ints_filtered = peak_ints_full[mask]
+                missingMaxCount = 0
+                if len(peak_freqs_filtered) > 0:
+                    for z in range(len(peak_freqs_filtered)):
+                        # Find indices within the frequency window
+                        freq_window = (freqs >= peak_freqs_filtered[z] - 0.2*dv_value_freq) & \
+                                    (freqs <= peak_freqs_filtered[z] + 0.2*dv_value_freq)
+                        
+                        # Get the frequency and intensity values in this window
+                        freqs_in_window = freqs[freq_window]
+                        sim_intensity_in_window = abs(indiv_intensity[freq_window])
+                        obs_intensity_in_window = abs(y_exp[freq_window])
+
+                        max_sim_intensity_in_window = max(sim_intensity_in_window)
+                        max_obs_intensity_in_window = max(obs_intensity_in_window)
+                        
+                    
+
+                        if max_obs_intensity_in_window/max_sim_intensity_in_window <= 0.4:
+                            missingMaxCount += 1
+
+                    #print('missing max count')
+                    #print(missingMaxCount/len(peak_freqs_filtered))
+                    if missingMaxCount/len(peak_freqs_filtered) >= 0.18: #rule out if theres too many missing lines
+                        if max(individual_contributions[i]) < 8*rms:
+                            delMols.append(i)
+
+                    #print(max(individual_contributions[i])/rms)
+
+
+        
 
         # Filtering lists of molecules and labels
         delMols = [i for i in delMols if i not in force_include_mols]
@@ -1867,11 +1919,14 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                 mask = peak_ints_full > 2*rms
                 peak_freqs_filtered = peak_freqs_full[mask]
                 peak_ints_filtered = peak_ints_full[mask]
+
+
                 missingCount = 0
+                missingMaxCount = 0
                 if len(peak_freqs_filtered) > 0:
                     for z in range(len(peak_freqs_filtered)):
-                        freq_window = (freqs >= peak_freqs_filtered[z] - 0.5*dv_value_freq) & \
-                                    (freqs <= peak_freqs_filtered[z] + 0.5*dv_value_freq)
+                        freq_window = (freqs >= peak_freqs_filtered[z] - 0.3*dv_value_freq) & \
+                                    (freqs <= peak_freqs_filtered[z] + 0.3*dv_value_freq)
                         
                         freqs_in_window = freqs[freq_window]
                         sim_intensity_in_window = abs(indiv_intensity[freq_window])
@@ -1882,6 +1937,10 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
                         if (integral_obs/integral_sim) <= 0.30:
                             missingCount += 1
 
+
+
+
+        
                     missingDeletion = False
                     if max(individual_contributions[i]) <= 3.1*rms:
                         if missingCount/len(peak_freqs_filtered) >= 0.1:
@@ -1895,6 +1954,37 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
 
                     if missingDeletion == True:
                         potential_delMols.append(i)
+
+
+                #now checking if there are any missing lines by maximum intensity
+                mask = peak_ints_full > 1.5*rms #get all peaks above 1.5 sigma
+                peak_freqs_filtered = peak_freqs_full[mask]
+                peak_ints_filtered = peak_ints_full[mask]
+                missingMaxCount = 0
+                if len(peak_freqs_filtered) > 0:
+                    for z in range(len(peak_freqs_filtered)):
+                        # Find indices within the frequency window
+                        freq_window = (freqs >= peak_freqs_filtered[z] - 0.2*dv_value_freq) & \
+                                    (freqs <= peak_freqs_filtered[z] + 0.2*dv_value_freq)
+                        
+                        # Get the frequency and intensity values in this window
+                        freqs_in_window = freqs[freq_window]
+                        sim_intensity_in_window = abs(indiv_intensity[freq_window])
+                        obs_intensity_in_window = abs(y_exp[freq_window])
+
+                        max_sim_intensity_in_window = max(sim_intensity_in_window)
+                        max_obs_intensity_in_window = max(obs_intensity_in_window)
+                        
+                    
+
+                        if max_obs_intensity_in_window/max_sim_intensity_in_window <= 0.4:
+                            missingMaxCount += 1
+
+                    #print('missing max count')
+                    #print(missingMaxCount/len(peak_freqs_filtered))
+                    if missingMaxCount/len(peak_freqs_filtered) >= 0.18: #rule out if theres too many missing lines
+                        if max(individual_contributions[i]) < 8*rms:
+                            delMols.append(i)        
 
         potential_delMols = [i for i in potential_delMols if i not in force_include_mols]
         potential_delMols = list(dict.fromkeys(potential_delMols))  # Remove duplicates while preserving order

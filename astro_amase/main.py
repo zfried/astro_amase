@@ -108,7 +108,7 @@ def assign_observations(
         - fitting_iterations: int, optional
             Number of fitting iterations to perform. Each iteration after the first applies 
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
-            (no molecules removed). Otherwise must be 2 or greater. Default: 2
+            (no molecules removed). Otherwise must be 2 or greater. Default: 0
     
     Returns
     -------
@@ -614,7 +614,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         - fitting_iterations: int, optional
             Number of fitting iterations to perform. Each iteration after the first applies 
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
-            (no molecules removed). Otherwise must be 2 or greater. Default: 2
+            (no molecules removed). Otherwise must be 2 or greater. Default: 0
     Returns
     -------
     results : dict
@@ -986,7 +986,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         - fitting_iterations: int, optional
             Number of fitting iterations to perform. Each iteration after the first applies 
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
-            (no molecules removed). Otherwise must be 2 or greater. Default: 2
+            (no molecules removed). Otherwise must be 2 or greater. Default: 0
 
         
     
@@ -1102,7 +1102,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'vlsr_range':kwargs.get('vlsr_range', [-250,250]),
         'vlsr_mols': kwargs.get('vlsr_mols', 'all'),
         'stricter': kwargs.get('stricter', False), #testing some things out with the parameter
-        'fitting_iterations': kwargs.get('fitting_iterations',2)
+        'fitting_iterations': kwargs.get('fitting_iterations',0)
     }
 
     if params['fitting_iterations'] == 1:
