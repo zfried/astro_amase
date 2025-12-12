@@ -29,6 +29,7 @@ from .constants import (
 from .utils.plotting import show_fit_in_notebook, plot_from_saved, get_individual_plots, create_interactive_vlsr_plot
 from .utils.astro_utils import find_peaks_local
 from .utils.molsim_utils import load_obs, find_limits, get_rms
+from .output.create_output_file import molecule_summary
 from .core.molecule_prediction import molecule_prediction
 
 __all__ = [
@@ -50,5 +51,6 @@ __all__ = [
     'load_obs',
     'find_limits',
     'molecule_prediction',
-    'create_interactive_vlsr_plot'
+    'create_interactive_vlsr_plot',
+    'molecule_summary'
 ]

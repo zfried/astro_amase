@@ -3,6 +3,8 @@ Create output.txt file to report line assignment results.
 """
 
 import os
+import pandas as pd
+import ast
 from ..constants import global_thresh, local_thresh
 
 
@@ -342,3 +344,87 @@ def remove_molecules_and_write_output(assignment: 'IterativeSpectrumAssignment',
     statDict = {'total_lines': len(assignment.lines), 'assigned_lines': assignCount, 'unidentified_lines': unCount, 'assigned_molecules': len(assignedNames)}
 
     return assignedMols, statDict
+
+
+def molecule_summary(csv_file):
+    """
+    Generate a summary of molecular assignments from peak results CSV file.
+    
+    Analyzes the carrier_molecules column to count how many lines each molecule
+    is assigned to and whether each molecule has at least one unblended line
+    (a line where it's the only assigned molecule).
+    
+    Parameters:
+    -----------
+    csv_file : str
+        Path to the final_peak_results.csv file containing a 'carrier_molecules' 
+        column with string representations of molecule lists
+        
+    Returns:
+    --------
+    dict
+        Dictionary sorted by line count (high to low) with structure:
+        {molecule_name: [line_count, has_unblended_line]}
+        where:
+            - line_count (int): Number of lines the molecule is assigned to
+            - has_unblended_line (bool): True if molecule has at least one line 
+              where it's the only assignment, False otherwise
+    
+    Raises:
+    -------
+    KeyError
+        If 'carrier_molecules' column is not found in the CSV file
+        
+    Notes:
+    ------
+    - Automatically ignores lines containing 'Unidentified' molecules
+    - Prints a formatted table to stdout showing molecule, line count, and 
+      unblended status
+    - Dictionary is sorted from most to least assigned lines
+    
+    Example:
+    --------
+    >>> results = molecule_summary('final_peak_results.csv')
+    Molecule                                 Lines      Unblended?
+    ------------------------------------------------------------
+    CH3OCHO vt=0,1                           378        Yes
+    CH3CHO                                   223        Yes
+    CH3COCH3                                 144        Yes
+    ...
+    
+    >>> # Access specific molecule data
+    >>> print(results['CH3OH, vt = 0 - 2'])
+    [45, True]  # 45 lines assigned, has unblended lines
+    """
+    df = pd.read_csv(csv_file)
+    
+    # Check if carrier_molecules column exists
+    if 'carrier_molecules' not in df.columns:
+        raise KeyError(f"'carrier_molecules' column not found in CSV file. "
+                      f"Available columns: {list(df.columns)}")
+    
+    molDict = {}
+    carrier_molecules = list(df['carrier_molecules'])
+    for c in carrier_molecules:
+        if 'Unidentified' not in c:
+            le = (ast.literal_eval(c))
+            for l in le:
+                if l not in molDict:
+                    molDict[l] = [1]
+                    if len(le) == 1:
+                        molDict[l].append(True)
+                    else:
+                        molDict[l].append(False)
+                else:
+                    molDict[l][0] = molDict[l][0] + 1
+                    if len(le) == 1:
+                        molDict[l][1] = True
+    
+    
+    sorted_mol_dict = dict(sorted(molDict.items(), key=lambda x: x[1][0], reverse=True))
+    print(f"{'Molecule':<40} {'Lines':<10} {'Unblended?'}")
+    print("-" * 60)
+    for molecule, stats in sorted_mol_dict.items():
+        unblended_status = "Yes" if stats[1] else "No"
+        print(f"{molecule:<40} {stats[0]:<10} {unblended_status}")
+    return sorted_mol_dict
