@@ -243,7 +243,7 @@ def load_dataset(direc: str, numMols: int = None) -> Tuple:
             allQn, totalSmiles, totalForms)
 
 
-def run_assignment(temp: float, direc: str, splatDict: Dict, 
+def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict, 
                   validAtoms: List[str], dv_value_freq: float, 
                   rms: float, peak_freqs_full: np.ndarray,
                   known_molecules: List[str] = None) -> Tuple:
@@ -260,6 +260,7 @@ def run_assignment(temp: float, direc: str, splatDict: Dict,
         peak_freqs_full: Array of all peak frequencies
         known_molecules: Optional list of SMILES strings for molecules known to be present.
                         These molecules will always be maintained in the detected list.
+        subdirec: Subdirectory in which the output files will be saved
     
     Returns:
         Tuple of (assigner, statistics)
@@ -273,7 +274,7 @@ def run_assignment(temp: float, direc: str, splatDict: Dict,
     # Load the dataset
     (actualFrequencies, intensities, allSmiles, allIso, 
      allFrequencies, molForms, molTags, molLinelist, 
-     allQn, totalSmiles, totalForms) = load_dataset(direc)
+     allQn, totalSmiles, totalForms) = load_dataset(subdirec)
     
     print(f"Loaded {len(actualFrequencies)} spectral lines")
     print(f"Found {len(totalSmiles)} unique molecular candidates")
@@ -364,7 +365,7 @@ def run_assignment(temp: float, direc: str, splatDict: Dict,
     return assigner, stats
 
 def save_results(assigner: IterativeSpectrumAssignment, 
-                direc: str, temp: float):
+                direc: str, temp: float, subdirec: str):
     """
     Save assignment results to files.
     """
@@ -397,8 +398,8 @@ def save_results(assigner: IterativeSpectrumAssignment,
         testing_scores_list.append(line_scores)
     
     # Save to pickle files
-    saveCombFile = os.path.join(direc, f'combined_list_{int(temp)}.pkl')
-    saveTestFile = os.path.join(direc, f'testing_list_{int(temp)}.pkl')
+    saveCombFile = os.path.join(subdirec, f'combined_list_{int(temp)}.pkl')
+    saveTestFile = os.path.join(subdirec, f'testing_list_{int(temp)}.pkl')
     
     with open(saveCombFile, "wb") as fp:
         pickle.dump(combined_scores_list, fp)
@@ -422,7 +423,7 @@ def save_results(assigner: IterativeSpectrumAssignment,
     #print(f"  {assigned_file}")
 
 
-def run_full_assignment(temp, direc, splatDict, valid_atoms, dv_value_freq, 
+def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_freq, 
                        rms, peak_freqs_full, known_molecules=None):
     """
     Complete assignment workflow with result saving.
@@ -430,6 +431,7 @@ def run_full_assignment(temp, direc, splatDict, valid_atoms, dv_value_freq,
     Args:
         temp: Temperature in Kelvin
         direc: Directory containing data files
+        subdirec: Directory in which output files will be saved.
         splatDict: Dictionary of spectral catalogs
         valid_atoms: List of valid atomic symbols
         dv_value_freq: Frequency tolerance
@@ -444,6 +446,7 @@ def run_full_assignment(temp, direc, splatDict, valid_atoms, dv_value_freq,
     assigner, stats = run_assignment(
         temp=temp,
         direc=direc,
+        subdirec = subdirec,
         splatDict=splatDict,
         validAtoms=valid_atoms,
         dv_value_freq=dv_value_freq,
@@ -453,7 +456,7 @@ def run_full_assignment(temp, direc, splatDict, valid_atoms, dv_value_freq,
     )
     
     # Save results
-    save_results(assigner, direc, temp)
+    save_results(assigner, direc, temp, subdirec)
 
     #output_file = os.path.join(direc, f'unassigned_analysis_{int(temp)}.txt')
     #assigner.generate_unassigned_analysis(output_file)

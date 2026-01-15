@@ -202,7 +202,7 @@ def create_folders_load_data(direc, tempInput):
 
 
 
-def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrape,vlsr_value, dv_value_freq, consider_hyperfine, user_temp,sourceSize,ll0,ul0, freq_arr,resolution, cont_temp, ignore_mol_list):
+def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrape,vlsr_value, dv_value_freq, consider_hyperfine, user_temp,sourceSize,ll0,ul0, freq_arr,resolution, cont_temp, ignore_mol_list, subdirec):
     """
     Generate comprehensive molecular candidate dataset for all spectral lines with simulated spectra.
     
@@ -253,6 +253,8 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
         Spectral resolution for peak finding in simulations.
     cont_temp : float
         Continuum temperature (K) for background radiation field.
+    subdirec: str
+        Path to subdirectory in which files will be saved.
     
     Returns
     -------
@@ -596,7 +598,7 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
     newMatrix = newMatrixNext   
 
 
-    pathDataset = os.path.join(direc, 'dataset.csv')
+    pathDataset = os.path.join(subdirec, 'dataset.csv')
     file = open(pathDataset, 'w+', newline='')
     with file:
         write = csv.writer(file)
@@ -668,7 +670,7 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
         finalMatrix2.append(row)
 
     fullMatrix = finalMatrix2
-    pathDatasetInt = os.path.join(direc, 'dataset_final.csv')
+    pathDatasetInt = os.path.join(subdirec, 'dataset_final.csv')
 
     file = open(pathDatasetInt, 'w+', newline='')
     with file:
@@ -698,7 +700,7 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
     dfMolSmiles = pd.DataFrame()
     dfMolSmiles['molecules'] = mol_smileMols
     dfMolSmiles['smiles'] = mol_smileSmiles
-    dfMolSmiles.to_csv(os.path.join(direc, 'mol_smiles.csv'), index=False)
+    dfMolSmiles.to_csv(os.path.join(subdirec, 'mol_smiles.csv'), index=False)
 
 
     for p in ignoreMolDict:

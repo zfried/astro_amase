@@ -4,6 +4,7 @@ Main entry point for Astro AMASE package.
 
 import os
 import time
+from datetime import datetime
 from typing import Dict, Any, Optional, Union, List
 import numpy as np
 import warnings
@@ -109,6 +110,13 @@ def assign_observations(
             Number of fitting iterations to perform. Each iteration after the first applies 
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
             (no molecules removed). Otherwise must be 2 or greater. Default: 0
+        - save_name: str, optional
+            Name of subdirectory that will be created within directory_path to store output files. Default: no_name.
+        - overwrite_old_files: bool, optional
+            If the save_name subdirectory already exists within directory_path and overwrite_old_files is True,
+            the old output files in this subdirectory will be overwritten. If the save_name subdirectory
+            exists within directory_path and overwrite_old_files is False, a new folder will be 
+            created to store the files. Default: False.
     
     Returns
     -------
@@ -615,6 +623,13 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Number of fitting iterations to perform. Each iteration after the first applies 
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
             (no molecules removed). Otherwise must be 2 or greater. Default: 0
+        - save_name: str, optional
+            Name of subdirectory that will be created within directory_path to store output files. Default: no_name.
+        - overwrite_old_files: bool, optional
+            If the save_name subdirectory already exists within directory_path and overwrite_old_files is True,
+            the old output files in this subdirectory will be overwritten. If the save_name subdirectory
+            exists within directory_path and overwrite_old_files is False, a new folder will be 
+            created to store the files. Default: False.
     Returns
     -------
     results : dict
@@ -729,9 +744,27 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         if not os.path.isfile(os.path.join(base_path, file_name)):
             raise ValueError(f"Error: {file_name} file is not present in your directory_path. "
                             "This needs to be downloaded from the Dropbox folder linked in the README and stored locally in directory_path.")
+        
+
+    #quality checks with output directory
+    subfolder_path = os.path.join(user_outputs['directory_path'], user_outputs['save_name'])
+
+    if not os.path.isdir(subfolder_path):
+        os.makedirs(subfolder_path)
+        print('Output files will be saved to: ' + subfolder_path)
+    else:
+        if not user_outputs['overwrite_old_files']:
+            # Create unique folder name with timestamp
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            new_name = timestamp
+            subfolder_path = os.path.join(user_outputs['directory_path'], new_name)
+            os.makedirs(subfolder_path)
+            warnings.warn(f"The path exists and overwrite_old_files is set to False. Created unique directory to store output files: '{new_name}'", UserWarning)
+        else:
+            warnings.warn(f"The path '{subfolder_path}' exists and overwrite_old_files is set to True. The old output files saved to this directory will be overwritten with the new files.", UserWarning)
 
 
-    
+
     # Determine linewidth
     
     if user_outputs['linewidth'] is None:
@@ -825,7 +858,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         user_outputs['source_size'],
         ll0, ul0, freq_arr, resolution,
         user_outputs['continuum_temperature'],
-        user_outputs['force_ignore_molecules']
+        user_outputs['force_ignore_molecules'],
+        subfolder_path
     )
     dataset_time = time.perf_counter()
     print(f'Dataset creation time: {round((dataset_time - param_time) / 60, 2)} minutes')
@@ -835,6 +869,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     assigner, stats = run_full_assignment(
         best_temp,
         user_outputs['directory_path'],
+        subfolder_path,
         splatDict,
         user_outputs['valid_atoms'],
         dv_value_freq,
@@ -849,6 +884,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     print("\n=== Fitting Best-Fit Model ===")
     delMols, column_density_df, assignment_df, internal_data = full_fit(
         user_outputs['directory_path'],
+        subfolder_path,
         assigner, peak_data['data'],
         best_temp, dv_value, dv_value_freq,
         ll0, ul0, best_vlsr,
@@ -863,7 +899,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     # Generate final output
     assignMols, stat_dict = remove_molecules_and_write_output(
         assigner, delMols,
-        user_outputs['directory_path'],
+        subfolder_path,
         best_temp, dv_value, best_vlsr
     )
     
@@ -872,7 +908,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     
     print(f"\n=== Analysis Complete ===")
     print(f'Total execution time: {round(total_time / 60, 2)} minutes')
-    print(f'\nResults saved to: {user_outputs["directory_path"]}')
+    print(f'\nResults saved to: {subfolder_path}')
     print('  - fit_spectrum.html: Interactive plot of fitted spectra')
     print('  - final_peak_results.csv: Molecular assignments for each line')
     print('  - output_report.txt: Detailed assignment report')
@@ -894,16 +930,15 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         '_internal_data': internal_data,
         'execution_time': total_time,
         'output_files': {
-            'interactive_plot': os.path.join(user_outputs['directory_path'], 'fit_spectrum.html'),
-            'peak_results': os.path.join(user_outputs['directory_path'], 'final_peak_results.csv'),
-            'detailed_report': os.path.join(user_outputs['directory_path'], 'output_report.txt'),
-            'column_densities': os.path.join(user_outputs['directory_path'], 'column_density_results.csv')
+            'interactive_plot': os.path.join(subfolder_path, 'fit_spectrum.html'),
+            'peak_results': os.path.join(subfolder_path, 'final_peak_results.csv'),
+            'detailed_report': os.path.join(subfolder_path, 'output_report.txt'),
+            'column_densities': os.path.join(subfolder_path, 'column_density_results.csv')
         }
     }
 
     print('saving parameters')
-    print(user_outputs['directory_path'])
-    save_parameters(user_outputs, results, user_outputs['directory_path'])
+    save_parameters(user_outputs, results, subfolder_path)
     
 
     return results
@@ -987,6 +1022,13 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             Number of fitting iterations to perform. Each iteration after the first applies 
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
             (no molecules removed). Otherwise must be 2 or greater. Default: 0
+        - save_name: str, optional
+            Name of subdirectory that will be created within directory_path to store output files. Default: no_name.
+        - overwrite_old_files: bool, optional
+            If the save_name subdirectory already exists within directory_path and overwrite_old_files is True,
+            the old output files in this subdirectory will be overwritten. If the save_name subdirectory
+            exists within directory_path and overwrite_old_files is False, a new folder will be 
+            created to store the files. Default: False.
 
         
     
@@ -1036,7 +1078,9 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'force_ignore_molecules',
         'force_include_molecules',
         'stricter',
-        'fitting_iterations'
+        'fitting_iterations',
+        'save_name',
+        'overwrite_old_files'
     }
 
     #printing a warning if an unexpected parameter is inputted
@@ -1102,7 +1146,10 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'vlsr_range':kwargs.get('vlsr_range', [-250,250]),
         'vlsr_mols': kwargs.get('vlsr_mols', 'all'),
         'stricter': kwargs.get('stricter', False), #testing some things out with the parameter
-        'fitting_iterations': kwargs.get('fitting_iterations',0)
+        'fitting_iterations': kwargs.get('fitting_iterations',0),
+        'save_name': kwargs.get('save_name', 'no_name'),
+        'overwrite_old_files': kwargs.get('overwrite_old_files', False)
+        
     }
 
     if params['fitting_iterations'] == 1:

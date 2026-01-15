@@ -47,6 +47,7 @@ import gc
 from ..utils.molsim_classes import Source, Simulation
 from ..constants import global_thresh, ckm
 from ..utils.molsim_utils import find_peaks
+from ..output.create_output_file import molecule_summary_pipeline,molecule_summary_pipeline_df
 
 
 
@@ -595,7 +596,7 @@ def get_individual_contributions_lookup(fitted_columns, labels, lookup_tables):
 
 def plot_simulation_vs_experiment_html_bokeh_compact_float32(
     y_exp, mol_list, best_columns, labels, filename, ll0, ul0, observation,
-    peak_freqs, peak_intensities, temp, dv_value, vlsr_value, cont, direc, sourceSize=1.0E20,
+    peak_freqs, peak_intensities, temp, dv_value, vlsr_value, cont, direc, subdirec, sourceSize=1.0E20,
     peak_window=1.0, max_initial_traces=0, save_html=True
 ):
     """
@@ -799,7 +800,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
         gc.collect()  # CRITICAL: Free all possible memory before Bokeh serialization
         print("  Memory cleanup complete, saving to disk...")
         
-        filename = os.path.join(direc, filename)
+        filename = os.path.join(subdirec, filename)
         output_file(filename)
         save(layout)
         
@@ -837,7 +838,7 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
     peak_df = pd.DataFrame(peak_results)
     
     if save_html:
-        peak_df.to_csv(os.path.join(direc, 'final_peak_results.csv'), index=False)
+        peak_df.to_csv(os.path.join(subdirec, 'final_peak_results.csv'), index=False)
 
     # Final cleanup
     gc.collect()
@@ -1326,7 +1327,7 @@ def full_fit_old(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq
     return delMols, cdDF, peak_df, internal_data
 
 
-def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0, ul0, 
+def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0, ul0, 
              vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, 
              sourceSize, column_density_range, resolution, dv_value_freq_og, stricter, 
              number_iterations=2):
@@ -2013,15 +2014,22 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
     # Plotting and saving
     maxSimInts, peak_results, peak_df, _ = plot_simulation_vs_experiment_html_bokeh_compact_float32(
         y_exp, mol_list, fitted_columns, labels, "fit_spectrum.html", ll0, ul0, dataScrape,
-        actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc,
+        actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc, subdirec,
         save_html=True, peak_window=0.5*dv_value_freq, sourceSize=sourceSize
     )
+
+
+    #getting dictionary that stores line assignment information
+    molecule_assignment_dict = molecule_summary_pipeline_df(peak_df)
+    #print(molecule_assignment_dict)
 
     # Make column density dataframe
     cdDF = pd.DataFrame()
     cdDF['molecule'] = labels
     cdDF['column_density'] = fitted_columns
     outputSmiles = []
+    outputLines = []
+    outputBlended = []
 
     for l in labels:
         if l in cdmsMols:
@@ -2030,9 +2038,22 @@ def full_fit(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll
         elif l in jplMols:
             idx = jplMols.index(l)
             outputSmiles.append(jplSmiles[idx])
-    cdDF['smiles'] = outputSmiles
 
-    cdDF.to_csv(os.path.join(direc, 'column_density_results.csv'), index=False)
+        if l in molecule_assignment_dict:
+            outputLines.append(molecule_assignment_dict[l][0])
+            outputBlended.append(molecule_assignment_dict[l][1])
+        else:
+            outputLines.append(0)
+            outputBlended.append(False)
+
+
+        #if l in molecule_assignment_dict:
+        #    outputLines.append()
+    cdDF['smiles'] = outputSmiles
+    cdDF['number_assigned_lines'] = outputLines
+    cdDF['has_unblended_line'] = outputBlended
+
+    cdDF.to_csv(os.path.join(subdirec, 'column_density_results.csv'), index=False)
     
     # Store internal data for notebook plotting
     internal_data = {
