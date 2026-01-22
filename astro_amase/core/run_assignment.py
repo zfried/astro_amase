@@ -246,7 +246,7 @@ def load_dataset(direc: str, numMols: int = None) -> Tuple:
 def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict, 
                   validAtoms: List[str], dv_value_freq: float, 
                   rms: float, peak_freqs_full: np.ndarray,
-                  known_molecules: List[str] = None) -> Tuple:
+                  known_molecules: List[str] = None, consider_structure: bool = True) -> Tuple:
     """
     Main function to run the iterative spectrum assignment.
     
@@ -296,7 +296,8 @@ def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict,
         ignore_isotopologues=ignoreIso,
         peak_freqs_full=peak_freqs_full,
         total_smiles=totalSmiles,
-        known_molecules=known_molecules
+        known_molecules=known_molecules,
+        consider_structure = consider_structure
     )
     
     # Initialize the assignment system
@@ -424,7 +425,7 @@ def save_results(assigner: IterativeSpectrumAssignment,
 
 
 def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_freq, 
-                       rms, peak_freqs_full, known_molecules=None):
+                       rms, peak_freqs_full, consider_structure, known_molecules=None):
     """
     Complete assignment workflow with result saving.
     
@@ -452,7 +453,8 @@ def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_
         dv_value_freq=dv_value_freq,
         rms=rms,
         peak_freqs_full=peak_freqs_full,
-        known_molecules=known_molecules
+        known_molecules=known_molecules,
+        consider_structure=consider_structure
     )
     
     # Save results

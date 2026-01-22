@@ -402,6 +402,9 @@ class ScoringContext:
     # Known molecules that must always be present in detected_smiles
     known_molecules: List[str] = field(default_factory=list)
     
+    #Control whether structure relevance is calculated
+    consider_structure: bool = True
+    
     # Dynamic state (changes as algorithm progresses)
     detected_smiles: List[str] = field(default_factory=list)
     highest_intensities: Dict[str, float] = field(default_factory=dict)
@@ -437,6 +440,9 @@ class ScoringContext:
     
     def calculate_structural_score(self, smiles: str) -> float:
         """Get structural relevance score for a SMILES string."""
+        if not self.consider_structure:
+            return 100.0
+        
         if len(self.detected_smiles) == 0:
             return 100.0
         
@@ -627,6 +633,11 @@ class IterativeSpectrumAssignment:
     
     def recalculate_structural_scores(self):
         """Run VICGAE structural relevance calculation."""
+        
+        if not self.context.consider_structure:
+            # Skip structural calculation - all scores remain 100.0
+            return
+        
         from .structural_relevance import runCalc
         from ..constants import vicgae_model, covParam, span
         

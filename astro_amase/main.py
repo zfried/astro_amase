@@ -117,6 +117,8 @@ def assign_observations(
             the old output files in this subdirectory will be overwritten. If the save_name subdirectory
             exists within directory_path and overwrite_old_files is False, a new folder will be 
             created to store the files. Default: False.
+        - consider_structure: bool, optional
+            Whether to consider structural relevance during the assignment. Default: True
     
     Returns
     -------
@@ -630,6 +632,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             the old output files in this subdirectory will be overwritten. If the save_name subdirectory
             exists within directory_path and overwrite_old_files is False, a new folder will be 
             created to store the files. Default: False.
+        - consider_structure: bool, optional
+            Whether to consider structural relevance during the assignment. Default: True
     Returns
     -------
     results : dict
@@ -875,7 +879,9 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         dv_value_freq,
         peak_data['rms'],
         peak_data['peak_freqs_full'],
-        known_molecules=user_outputs.get('known_molecules', None)
+        user_outputs['consider_structure'],
+        known_molecules=user_outputs.get('known_molecules', None),
+
     )
     assign_time = time.perf_counter()
     print(f'Line assignment time: {round((assign_time - dataset_time) / 60, 2)} minutes')
@@ -1029,6 +1035,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             the old output files in this subdirectory will be overwritten. If the save_name subdirectory
             exists within directory_path and overwrite_old_files is False, a new folder will be 
             created to store the files. Default: False.
+        - consider_structure: bool, optional
+            Whether to consider structural relevance during the assignment. Default: True
 
         
     
@@ -1080,7 +1088,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'stricter',
         'fitting_iterations',
         'save_name',
-        'overwrite_old_files'
+        'overwrite_old_files',
+        'consider_structure'
     }
 
     #printing a warning if an unexpected parameter is inputted
@@ -1148,7 +1157,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'stricter': kwargs.get('stricter', False), #testing some things out with the parameter
         'fitting_iterations': kwargs.get('fitting_iterations',0),
         'save_name': kwargs.get('save_name', 'no_name'),
-        'overwrite_old_files': kwargs.get('overwrite_old_files', False)
+        'overwrite_old_files': kwargs.get('overwrite_old_files', False),
+        'consider_structure': kwargs.get('consider_structure', True)
         
     }
 
