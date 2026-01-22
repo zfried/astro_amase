@@ -1431,6 +1431,7 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
     
     assignedMols, blended_single_mols = get_assigned_molecules(assigner)
 
+
     for i in force_include_mols:
         if i in cdms_mols:
             if (i, 'CDMS') not in assignedMols:
@@ -1449,7 +1450,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
             i_clean = i[0].replace(" [hf]", "")
             for g in assignedMols:
                 if g[0] == i_clean:
-                    delList1.append(g[0])
+                    if g[0] not in force_include_mols:
+                        delList1.append(g[0])
 
     assignedMols = [i for i in assignedMols if i[0] not in delList1 and i[0] not in blended_mols_final]
 
@@ -1463,6 +1465,11 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                 result[key] = source
 
     assignedMols = list(result.items())
+
+    if len(assignedMols) == 0:
+        raise ValueError(
+            "No molecules were assigned. Fitting will therefore fail.")
+
 
     # Retrieving molecule objects
     for x in assignedMols:
@@ -1523,6 +1530,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
         print(f'\nWill conduct {number_iterations} iterations of fitting.')
 
     converged = False
+
+    #print(labels)
 
     # ========== FIRST ITERATION ==========
     if number_iterations != 100000:
@@ -1749,9 +1758,12 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
 
 
         
-
+        #print(delMols)
+        #print(force_include_mols)
         # Filtering lists of molecules and labels
         delMols = [i for i in delMols if i not in force_include_mols]
+        #print(delMols)
+    
 
         
         # Track deleted molecules
