@@ -596,7 +596,7 @@ def get_individual_contributions_lookup(fitted_columns, labels, lookup_tables):
 
 def plot_simulation_vs_experiment_html_bokeh_compact_float32(
     y_exp, mol_list, best_columns, labels, filename, ll0, ul0, observation,
-    peak_freqs, peak_intensities, temp, dv_value, vlsr_value, cont, direc, subdirec, sourceSize=1.0E20,
+    peak_freqs, peak_intensities, temp, dv_value, vlsr_value, cont, direc, subdirec, save_individual_contributions, sourceSize=1.0E20,
     peak_window=1.0, max_initial_traces=0, save_html=True
 ):
     """
@@ -729,11 +729,18 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
             spec = np.zeros_like(total_sim)
             warnings.warn(f"Empty spectrum generated for {labels[i] if i < len(labels) else f'Molecule {i+1}'}, using zeros")
         
+        
         individual_sims.append(spec)
         total_sim += spec
         maxSimInts.append(np.max(spec))
 
         mol_name = labels[i] if i < len(labels) else f"Molecule {i+1}"
+        if save_individual_contributions:
+            save_indiv_direc = os.path.join(subdirec,'individual_contributions')
+            np.savetxt(os.path.join(save_indiv_direc, mol_name + '_simulated_spectrum.txt'), np.column_stack((freqs, spec)), delimiter='\t')
+
+
+
         visible = i < max_initial_traces
         
         # Use ColumnDataSource for better memory management
@@ -759,6 +766,14 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
     # Total simulated spectrum using ColumnDataSource
     total_source = ColumnDataSource(data=dict(x=freqs, y=total_sim))
+
+    if save_individual_contributions:
+        save_indiv_direc = os.path.join(subdirec,'individual_contributions')
+        np.savetxt(os.path.join(save_indiv_direc, 'total_simulated_spectrum.txt'), np.column_stack((freqs, total_sim)), delimiter='\t')
+        remaining_intensity = y_exp - total_sim
+        np.savetxt(os.path.join(save_indiv_direc, 'simulation_residual.txt'), np.column_stack((freqs, remaining_intensity)), delimiter='\t')
+
+
     r_total = p.line('x', 'y', source=total_source, line_color='red', 
                     line_width=2, visible=True, name="Total Simulated")
     renderers.append(r_total)
@@ -1329,7 +1344,7 @@ def full_fit_old(direc, assigner, dataScrape, tempInput, dv_value, dv_value_freq
 
 def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0, ul0, 
              vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, 
-             sourceSize, column_density_range, resolution, dv_value_freq_og, stricter, 
+             sourceSize, column_density_range, resolution, dv_value_freq_og, stricter, save_individual_contributions,
              number_iterations=2):
     """
     Execute complete spectral fitting workflow with quality control and visualization.
@@ -2026,7 +2041,7 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
     # Plotting and saving
     maxSimInts, peak_results, peak_df, _ = plot_simulation_vs_experiment_html_bokeh_compact_float32(
         y_exp, mol_list, fitted_columns, labels, "fit_spectrum.html", ll0, ul0, dataScrape,
-        actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc, subdirec,
+        actualFrequencies, intensities, tempInput, dv_value, vlsr_value, cont, direc, subdirec, save_individual_contributions,
         save_html=True, peak_window=0.5*dv_value_freq, sourceSize=sourceSize
     )
 

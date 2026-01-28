@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional, Union, List
 import numpy as np
 import warnings
+import shutil
 from .config.config_handler import load_config_file, get_parameters
 from .constants import ckm
 from .analysis.determine_linewidth import find_linewidth, find_linewidth_standalone
@@ -119,6 +120,10 @@ def assign_observations(
             created to store the files. Default: False.
         - consider_structure: bool, optional
             Whether to consider structural relevance during the assignment. Default: True
+        - save_individual_contributions: bool, optional
+            Whether to save .txt files containing the simulated spectra (frequency and intensity, tab separated) of each assigned molecule.
+            The total summed simulated spectrum is also saved along with the residual between the simulated spectrum and observes spectrum.
+            Default: False
     
     Returns
     -------
@@ -634,6 +639,10 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             created to store the files. Default: False.
         - consider_structure: bool, optional
             Whether to consider structural relevance during the assignment. Default: True
+        - save_individual_contributions: bool, optional
+            Whether to save .txt files containing the simulated spectra (frequency and intensity, tab separated) of each assigned molecule.
+            The total summed simulated spectrum is also saved along with the residual between the simulated spectrum and observes spectrum.
+            Default: False
     Returns
     -------
     results : dict
@@ -756,16 +765,27 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     if not os.path.isdir(subfolder_path):
         os.makedirs(subfolder_path)
         print('Output files will be saved to: ' + subfolder_path)
+        if user_outputs['save_individual_contributions']:
+            os.makedirs(os.path.join(subfolder_path,'individual_contributions'))
     else:
         if not user_outputs['overwrite_old_files']:
             # Create unique folder name with timestamp
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            new_name = timestamp
+            new_name = user_outputs['save_name'] + '_'+ timestamp
             subfolder_path = os.path.join(user_outputs['directory_path'], new_name)
             os.makedirs(subfolder_path)
+            if user_outputs['save_individual_contributions']:
+                os.makedirs(os.path.join(subfolder_path,'individual_contributions'))
             warnings.warn(f"The path exists and overwrite_old_files is set to False. Created unique directory to store output files: '{new_name}'", UserWarning)
         else:
+            
             warnings.warn(f"The path '{subfolder_path}' exists and overwrite_old_files is set to True. The old output files saved to this directory will be overwritten with the new files.", UserWarning)
+            if user_outputs['save_individual_contributions']:
+                if os.path.exists(os.path.join(subfolder_path,'individual_contributions')):
+                    shutil.rmtree(os.path.join(subfolder_path,'individual_contributions'))
+                os.makedirs(os.path.join(subfolder_path,'individual_contributions'))
+
+
 
 
 
@@ -896,7 +916,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['fitting_iterations']
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['save_individual_contributions'], user_outputs['fitting_iterations']
     )
 
     fit_time = time.perf_counter()
@@ -1037,6 +1057,10 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             created to store the files. Default: False.
         - consider_structure: bool, optional
             Whether to consider structural relevance during the assignment. Default: True
+        - save_individual_contributions: bool, optional
+            Whether to save .txt files containing the simulated spectra (frequency and intensity, tab separated) of each assigned molecule.
+            The total summed simulated spectrum is also saved along with the residual between the simulated spectrum and observes spectrum.
+            Default: False
 
         
     
@@ -1089,7 +1113,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'fitting_iterations',
         'save_name',
         'overwrite_old_files',
-        'consider_structure'
+        'consider_structure',
+        'save_individual_contributions'
     }
 
     #printing a warning if an unexpected parameter is inputted
@@ -1158,7 +1183,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'fitting_iterations': kwargs.get('fitting_iterations',0),
         'save_name': kwargs.get('save_name', 'no_name'),
         'overwrite_old_files': kwargs.get('overwrite_old_files', False),
-        'consider_structure': kwargs.get('consider_structure', True)
+        'consider_structure': kwargs.get('consider_structure', True),
+        'save_individual_contributions': kwargs.get('save_individual_contributions', False)
         
     }
 
