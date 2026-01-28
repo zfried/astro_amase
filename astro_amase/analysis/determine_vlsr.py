@@ -534,6 +534,32 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
 
 
         else:
+            hasOutsideMol = False
+            outside_mols = []
+            outside_mols_comb = {}
+            has_both_outside_mols = []
+            for m in vlsr_mols:
+                if m not in database_names:
+                    print(m + ' was in vlsr_mols. However, its not in the notebooks/vlsr_molecules.csv file. Expanding the search. This might take a bit extra time.')
+                    hasOutsideMol = True
+                    outside_mols.append(m)
+            if hasOutsideMol:
+                with gzip.open(os.path.join(direc, "transitions_database.pkl.gz"), "rb") as f: # Load the transitions database
+                    database_freqs_full, database_errs_full, database_tags_full, database_lists_full, database_smiles_full, database_names_full, database_isos_full, database_vibs_full, database_forms_full = pickle.load(f)
+                
+                unique_pairs = np.unique(np.column_stack((database_names_full, database_lists_full)), axis=0)
+            
+                for target_value in outside_mols:
+                    matching_pairs = unique_pairs[unique_pairs[:, 0] == target_value]
+                    has_CDMS1 = np.any(matching_pairs[:, 1] == 'CDMS')
+                    has_JPL1 = np.any(matching_pairs[:, 1] == 'JPL')
+
+                    if has_CDMS1 and has_JPL1:
+                        outside_mols_comb[target_value] = 'CDMS'
+                    else:
+                        outside_mols_comb[target_value] = matching_pairs[0][1]
+
+
             for i in range(len(sorted_peak_freqs)): #loop through all determined peaks
                 line_mols = []
                 start_idx = np.searchsorted(database_freqs, sorted_peak_freqs[i] + min_freq_threshold, side="left") #start index in uploaded database for candidates within specified vlsr range
@@ -572,11 +598,41 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
                                 for igm in igMols: #excluding problematic molecules for quality control
                                     if igm in match_tu[0]:
                                         rule_out_var = True
-                                if rule_out_var == False:
-                                    if match_tu[-1] > -5.1 and match_tu not in line_mols:
-                                        line_mols.append(match_tu)
+                                #if rule_out_var == False:
+                                if match_tu[-1] > -5.1 and match_tu not in line_mols:
+                                    line_mols.append(match_tu)
 
+               
+                start_idx = np.searchsorted(database_freqs_full, sorted_peak_freqs[i] + min_freq_threshold, side="left") #start index in uploaded database for candidates within specified vlsr range
+                end_idx = np.searchsorted(database_freqs_full, sorted_peak_freqs[i] + max_freq_threshold, side="right") #end index in uploaded database for candidates within specified vlsr range
+                for match_idx in range(start_idx, end_idx):
+                    if database_names_full[match_idx] in outside_mols_comb and outside_mols_comb[database_names_full[match_idx]] == database_lists_full[match_idx]:
+                        match_tu = (
+                        database_names_full[match_idx], database_forms_full[match_idx], database_smiles_full[match_idx], database_freqs_full[match_idx],
+                        database_errs_full[match_idx], database_isos_full[match_idx], database_tags_full[match_idx], database_lists_full[match_idx],
+                        database_vibs_full[match_idx],0) #tuple of matched molecule data
+
+                        if (database_names_full[match_idx], database_lists_full[match_idx]) not in molDict:
+                                if database_lists_full[match_idx] == 'CDMS': #upload CDMS molecule and load into molsim object
+                                    molPath = os.path.join(direc, 'cdms_pkl', f"{database_tags_full[match_idx]:06d}.pkl")
+                                    with open(molPath, 'rb') as md:
+                                        mol = pickle.load(md)
+                                    molDict[(database_names_full[match_idx], database_lists_full[match_idx])] = mol #add molecule to molDict
+
+                                if database_lists_full[match_idx] == 'JPL':
+                                    molPath = os.path.join(direc, 'jpl_pkl', str(database_tags_full[match_idx]) + '.pkl')
+                                    with open(molPath, 'rb') as md:
+                                            mol = pickle.load(md)
+                                    molDict[(database_names_full[match_idx], database_lists_full[match_idx])] = mol #add molecule to molDict
+
+
+                        if match_tu not in line_mols:
+                            line_mols.append(match_tu)
+
+                
                 allCans.append(line_mols) #store all candidates for each peak frequency within 250 km/s
+
+        #print(molDict)
 
         #print('all cans')
         #for g in allCans:
@@ -767,8 +823,11 @@ def find_vlsr(vlsr_choice, vlsrInput, temp_choice, tempInput, direc, freq_arr, i
             if z[1] <= top_bin[2] and z[1] >= top_bin[1]:
                 if z[0][0] not in labels:
                     labels.append(z[0][0])
-                    mol_list.append(molDict[z[0][0],'CDMS'])
-
+                    if (z[0][0], 'CDMS') in molDict:
+                        mol_list.append(molDict[z[0][0], 'CDMS'])
+                    elif (z[0][0], 'JPL') in molDict:
+                        mol_list.append(molDict[z[0][0], 'JPL'])
+        
         if temp_choice == False:
             #setting initial column densities for fit
             initial_columns = [1e14] * len(mol_list)
