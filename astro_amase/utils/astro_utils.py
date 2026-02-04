@@ -19,6 +19,9 @@ from scipy.signal import correlate
 from scipy.stats import multivariate_normal
 from scipy import signal
 from datetime import datetime
+import json
+import os
+from typing import Dict, Any
 from .molsim_utils import get_rms
 from ..constants import ckm
 
@@ -485,8 +488,7 @@ def initial_banner():
     for line in banner:
         print(line)
 
-
-def checkAllLines(form, rms, sorted_freqs, sorted_ints, dv_value_freq, closestFreq, peak_freqs_full):
+def checkAllLines(form, sorted_freqs, sorted_ints, sorted_snr, dv_value_freq, closestFreq, peak_freqs_full):
     """
     Evaluate whether a molecular candidate should be ruled out based on the presence 
     of its predicted strong spectral lines in the observed spectrum.
@@ -501,8 +503,144 @@ def checkAllLines(form, rms, sorted_freqs, sorted_ints, dv_value_freq, closestFr
     ----------
     form : str
         Identifier or formula of the molecular candidate (not directly used in scoring).
-    rms : float
-        Root mean square noise level of the observed spectrum.
+    freq_arr : np.ndarray
+        Frequency array matching rms_arr.
+    rms_arr : np.ndarray
+        Array of RMS noise levels at each frequency.
+    sorted_freqs : np.ndarray
+        Array of predicted transition frequencies (sorted by intensity).
+    sorted_ints : np.ndarray
+        Array of predicted line intensities corresponding to `sorted_freqs`.
+    dv_value_freq : float
+        Frequency equivalent of the velocity width (Δv) used to define tolerance ranges.
+    closestFreq : float
+        Frequency of the candidate line currently under consideration; excluded from checks.
+    peak_freqs_full : np.ndarray
+        Array of observed 3σ spectral peak frequencies in the dataset.
+
+    Returns
+    -------
+    rule_out : bool
+        `True` if the candidate should be ruled out based on insufficient presence of
+        strong predicted lines in the observed spectrum, otherwise `False`.
+
+    Notes
+    -----
+    The function applies three intensity thresholds sequentially:
+        1. **≥ 20σ lines:** Must have at least 80% matched within ±0.5 × dV.
+        2. **≥ 10σ lines:** Must have at least 50% matched within ±0.5 × dV.
+        3. **≥ 4σ lines (fallback):** Used only if ≤1 line above 10σ; must have at least 30% matched.
+
+    If any of these conditions fail, the molecule is marked as ruled out.
+    """
+
+    # Get RMS at the closest frequency
+    #idx = np.argmin(np.abs(freq_arr - closestFreq))
+    #print('checkallLines freq and rms')
+    #print(freq_arr[idx])
+    #rms = rms_arr[idx]
+    #print(rms)
+
+
+
+    rule_out = False #variable to determine whether to rule out the molecule based on these intensity checks
+
+    #check how many of the 20 sigma lines are within 0.5*dV of a peak in the observed spectrum
+    intensity_mask = sorted_snr >= 20
+    freq_mask = sorted_freqs != closestFreq
+    combined_mask = intensity_mask & freq_mask
+    filtered_freqs = sorted_freqs[combined_mask]
+    correct = 0
+
+    tolerance = 0.5 * dv_value_freq
+
+    if len(filtered_freqs) > 0:
+        # Create all tolerance ranges at once
+        lower_bounds = filtered_freqs - tolerance
+        upper_bounds = filtered_freqs + tolerance
+        
+        # Check which 20 sigma lines are nearby peaks in the spectrum
+        matches = np.any(
+            (peak_freqs_full[:, None] >= lower_bounds) & 
+            (peak_freqs_full[:, None] <= upper_bounds), 
+            axis=0
+        )
+        
+        #counts the number of lines with matches
+        correct = np.sum(matches)
+                    
+        #if less than 80% of the 20 sigma lines are present, rule out the molecule
+        if correct / len(filtered_freqs) < 0.8: 
+            return True
+        
+            
+    #check how many of the 10 sigma lines are within 0.5*dV of a peak in the observed spectrum
+    intensity_mask = sorted_snr >= 10
+    freq_mask = sorted_freqs != closestFreq
+    combined_mask = intensity_mask & freq_mask
+    filtered_freqs = sorted_freqs[combined_mask]
+    correct = 0
+
+    
+    if len(filtered_freqs) > 1:
+        # Create all tolerance ranges at once
+        lower_bounds = filtered_freqs - tolerance
+        upper_bounds = filtered_freqs + tolerance
+        
+        # Check which 10 sigma lines are nearby peaks in the spectrum
+        matches = np.any(
+            (peak_freqs_full[:, None] >= lower_bounds) & 
+            (peak_freqs_full[:, None] <= upper_bounds), 
+            axis=0
+        )
+
+        correct = np.sum(matches)
+        if correct / len(filtered_freqs) < 0.5:
+            return True
+
+    else: #if there is only one (or less) 10 sigma line(s), check the 4 sigma lines
+        intensity_mask = sorted_snr >= 4
+        freq_mask = sorted_freqs != closestFreq
+        combined_mask = intensity_mask & freq_mask
+        filtered_freqs = sorted_freqs[combined_mask]
+        correct = 0
+        if len(filtered_freqs) > 0:
+            # Create all tolerance ranges at once
+            lower_bounds = filtered_freqs - tolerance
+            upper_bounds = filtered_freqs + tolerance
+            
+            # Check which 5 sigma lines are nearby peaks in the spectrum
+            matches = np.any(
+                (peak_freqs_full[:, None] >= lower_bounds) & 
+                (peak_freqs_full[:, None] <= upper_bounds), 
+                axis=0
+            )
+            
+            correct = np.sum(matches)
+            if correct / len(filtered_freqs) < 0.3:  
+                rule_out = True
+
+    return rule_out
+
+def checkAllLinesOLD(form, freq_arr, rms_arr, sorted_freqs, sorted_ints, dv_value_freq, closestFreq, peak_freqs_full):
+    """
+    Evaluate whether a molecular candidate should be ruled out based on the presence 
+    of its predicted strong spectral lines in the observed spectrum.
+
+    The function examines the top predicted line intensities (20σ, 10σ, and 4σ levels)
+    and checks how many of these transitions are matched by observed spectral peaks 
+    within a given frequency tolerance (±0.5 × dV). If too few of these strong lines 
+    are present in the observed spectrum, the molecule is flagged for exclusion 
+    (i.e., `rule_out = True`).
+
+    Parameters
+    ----------
+    form : str
+        Identifier or formula of the molecular candidate (not directly used in scoring).
+    freq_arr : np.ndarray
+        Frequency array matching rms_arr.
+    rms_arr : np.ndarray
+        Array of RMS noise levels at each frequency.
     sorted_freqs : np.ndarray
         Array of predicted transition frequencies (sorted by intensity).
     sorted_ints : np.ndarray
@@ -614,13 +752,8 @@ def checkAllLines(form, rms, sorted_freqs, sorted_ints, dv_value_freq, closestFr
 Simple functions to save and load analysis parameters.
 """
 
-import json
-import os
-from datetime import datetime
-from typing import Dict, Any
 
-
-def save_parameters(user_outputs: Dict[str, Any], results: Dict[str, Any], 
+def save_parametersOLD(user_outputs: Dict[str, Any], results: Dict[str, Any], 
                     output_dir: str, filename: str = "analysis_parameters.json") -> str:
     """
     Save all input and determined parameters to a JSON file for future reference.
@@ -669,8 +802,8 @@ def save_parameters(user_outputs: Dict[str, Any], results: Dict[str, Any],
             "source_size": float(user_outputs.get('source_size', 1E20)),
             "continuum_temperature": float(user_outputs.get('continuum_temperature', 2.7)),
             "valid_atoms": user_outputs.get('valid_atoms', ['C', 'O', 'H', 'N', 'S']),
-            "rms_noise_manual": float(user_outputs['rms_noise']) if user_outputs.get('rms_manual') else None,
-            "rms_manual": user_outputs.get('rms_manual', False),
+            #"rms_noise_manual": (user_outputs['rms_noise']) if user_outputs.get('rms_manual') else None,
+            #"rms_manual": user_outputs.get('rms_manual', False),
             "force_ignore_molecules": user_outputs.get('force_ignore_molecules', []),
             "force_include_molecules": user_outputs.get('force_include_molecules', [])
         },
@@ -680,7 +813,7 @@ def save_parameters(user_outputs: Dict[str, Any], results: Dict[str, Any],
             "vlsr": float(results.get('vlsr', 0)),
             "linewidth_kms": float(results.get('linewidth', 0)),
             "linewidth_mhz": float(results.get('linewidth_freq', 0)),
-            "rms_noise": float(results.get('rms', 0)),
+            #"rms_noise": (results.get('rms', 0)),
             "resolution": float(results.get('resolution',0.1))
         },
         
@@ -688,6 +821,145 @@ def save_parameters(user_outputs: Dict[str, Any], results: Dict[str, Any],
             "total_lines_detected": results.get('statistics', {}).get('total_lines', 0),
             "assigned_lines": results.get('statistics', {}).get('assigned', 0),
             "unidentified_lines": results.get('statistics', {}).get('unidentified', 0),
+            "execution_time_seconds": float(results.get('execution_time', 0)),
+            "execution_time_minutes": round(float(results.get('execution_time', 0)) / 60, 2)
+        },
+        
+        "output_files": {
+            "interactive_plot": results.get('output_files', {}).get('interactive_plot'),
+            "peak_results": results.get('output_files', {}).get('peak_results'),
+            "detailed_report": results.get('output_files', {}).get('detailed_report'),
+            "column_densities": results.get('output_files', {}).get('column_densities'),
+            "parameter_file": os.path.join(output_dir, filename)
+        }
+    }
+    
+    # Ensure output directory exists
+    #os.makedirs(output_dir, exist_ok=True)
+    
+    # Save to JSON file
+    output_path = os.path.join(output_dir, filename)
+    with open(output_path, 'w') as f:
+        json.dump(params, f, indent=2)
+    
+    print(f"\nParameters saved to: {output_path}")
+    
+    return output_path
+
+
+def load_parametersOLD(filepath: str) -> Dict[str, Any]:
+    """
+    Load previously saved analysis parameters from a JSON file.
+    
+    Parameters
+    ----------
+    filepath : str
+        Path to the saved parameter JSON file
+    
+    Returns
+    -------
+    dict
+        Dictionary containing all saved parameters with keys:
+        - metadata: timestamp and analysis date
+        - input_parameters: all user-provided inputs
+        - determined_parameters: VLSR, temperature, linewidth, RMS
+        - analysis_statistics: line counts and execution time
+        - output_files: paths to all output files
+        
+    Examples
+    --------
+    >>> from parameter_io import load_parameters
+    >>> params = load_parameters('./output/analysis_parameters.json')
+    >>> print(f"Previous VLSR: {params['determined_parameters']['vlsr']} km/s")
+    >>> print(f"Previous Temperature: {params['determined_parameters']['temperature']} K")
+    >>> print(f"Previous Linewidth: {params['determined_parameters']['linewidth_kms']} km/s")
+    """
+    with open(filepath, 'r') as f:
+        params = json.load(f)
+    
+    return params
+
+
+def save_parameters(user_outputs: Dict[str, Any], results: Dict[str, Any], 
+                    output_dir: str, filename: str = "analysis_parameters.json") -> str:
+    """
+    Save all input and determined parameters to a JSON file for future reference.
+    
+    Parameters
+    ----------
+    user_outputs : dict
+        Dictionary of input parameters from the user
+    results : dict
+        Dictionary of determined parameters and results
+    output_dir : str
+        Directory where the parameter file will be saved
+    filename : str, optional
+        Name of the output file. Default: 'analysis_parameters.json'
+    
+    Returns
+    -------
+    str
+        Full path to the saved parameter file
+        
+    Examples
+    --------
+    >>> from parameter_io import save_parameters
+    >>> params_file = save_parameters(user_outputs, results, './output/')
+    >>> print(f"Parameters saved to: {params_file}")
+    """
+    # Handle RMS - can be either a dict or a single value
+    rms_value = results.get('rms', 0)
+    
+    if isinstance(rms_value, dict):
+        # Convert RMS dict keys from tuples to strings for JSON serialization
+        rms_dict_serializable = {}
+        for (freq_min, freq_max), rms_val in rms_value.items():
+            key = f"{freq_min:.6f}-{freq_max:.6f}"
+            rms_dict_serializable[key] = float(rms_val)
+        rms_noise = rms_dict_serializable
+    else:
+        # Single RMS value
+        rms_noise = float(rms_value)
+    
+    # Build comprehensive parameter dictionary
+    params = {
+        "metadata": {
+            "timestamp": datetime.now().isoformat(),
+            "analysis_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        },
+        
+        "input_parameters": {
+            "spectrum_path": user_outputs.get('spectrum_path'),
+            "directory_path": user_outputs.get('directory_path'),
+            "temperature_input": float(user_outputs.get('temperature', 0)),
+            "temperature_is_exact": user_outputs.get('temperature_choice', False),
+            "vlsr_input": float(user_outputs['vlsr_input']) if user_outputs.get('vlsr_input') is not None else None,
+            "vlsr_known": user_outputs.get('vlsr_known', False),
+            "sigma_threshold": float(user_outputs.get('sigma_threshold', 5.0)),
+            "observation_type": user_outputs.get('observation_type'),
+            "observation_type_description": "single_dish" if user_outputs.get('observation_type') == '1' else "interferometric",
+            "beam_major_axis_or_dish_diameter": float(user_outputs.get('bmaj_or_dish', 0)),
+            "beam_minor_axis": float(user_outputs['bmin']) if user_outputs.get('bmin') is not None else None,
+            "source_size": float(user_outputs.get('source_size', 1E20)),
+            "continuum_temperature": float(user_outputs.get('continuum_temperature', 2.7)),
+            "valid_atoms": user_outputs.get('valid_atoms', ['C', 'O', 'H', 'N', 'S']),
+            "force_ignore_molecules": user_outputs.get('force_ignore_molecules', []),
+            "force_include_molecules": user_outputs.get('force_include_molecules', [])
+        },
+        
+        "determined_parameters": {
+            "temperature": float(results.get('temperature', 0)),
+            "vlsr": float(results.get('vlsr', 0)),
+            "linewidth_kms": float(results.get('linewidth', 0)),
+            "linewidth_mhz": float(results.get('linewidth_freq', 0)),
+            "rms_noise": rms_noise,  # Either dict or float
+            "resolution": float(results.get('resolution', 0.1))
+        },
+        
+        "analysis_statistics": {
+            "total_lines_detected": results.get('statistics', {}).get('total_lines', 0),
+            "assigned_lines": results.get('statistics', {}).get('assigned_lines', 0),
+            "unidentified_lines": results.get('statistics', {}).get('unidentified_lines', 0),
             "execution_time_seconds": float(results.get('execution_time', 0)),
             "execution_time_minutes": round(float(results.get('execution_time', 0)) / 60, 2)
         },
@@ -729,19 +1001,39 @@ def load_parameters(filepath: str) -> Dict[str, Any]:
         Dictionary containing all saved parameters with keys:
         - metadata: timestamp and analysis date
         - input_parameters: all user-provided inputs
-        - determined_parameters: VLSR, temperature, linewidth, RMS
+        - determined_parameters: VLSR, temperature, linewidth, RMS (dict with tuple keys or float)
         - analysis_statistics: line counts and execution time
         - output_files: paths to all output files
         
+    Notes
+    -----
+    rms_noise will be either:
+    - A float (single global RMS value)
+    - A dict with tuple keys: {(freq_min, freq_max): rms_value, ...}
+        
     Examples
     --------
-    >>> from parameter_io import load_parameters
     >>> params = load_parameters('./output/analysis_parameters.json')
-    >>> print(f"Previous VLSR: {params['determined_parameters']['vlsr']} km/s")
-    >>> print(f"Previous Temperature: {params['determined_parameters']['temperature']} K")
-    >>> print(f"Previous Linewidth: {params['determined_parameters']['linewidth_kms']} km/s")
+    >>> rms = params['determined_parameters']['rms_noise']
+    >>> if isinstance(rms, dict):
+    >>>     # Dictionary with tuple keys ready to use
+    >>>     rms_arr = map_rms_to_spectrum(freq_arr, rms)
+    >>> else:
+    >>>     # Single RMS value
+    >>>     rms_arr = np.full_like(freq_arr, rms)
     """
     with open(filepath, 'r') as f:
         params = json.load(f)
+    
+    # Convert RMS dict keys back from strings to tuples if it's a dict
+    rms_noise = params.get('determined_parameters', {}).get('rms_noise')
+    if isinstance(rms_noise, dict):
+        rms_dict_tuple = {}
+        for key_str, rms_value in rms_noise.items():
+            # Split the string key and convert to floats
+            freq_min, freq_max = map(float, key_str.split('-'))
+            rms_dict_tuple[(freq_min, freq_max)] = rms_value
+        # Replace with tuple-key version
+        params['determined_parameters']['rms_noise'] = rms_dict_tuple
     
     return params

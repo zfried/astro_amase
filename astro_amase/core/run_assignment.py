@@ -68,7 +68,9 @@ def create_candidate_score(line_idx: int, cand_idx: int,
                            allFrequencies: List, allQn: List, molTags: List,
                            molLinelist: List, actualFrequencies: List,
                            intensities: List, splatDict: Dict,
-                           dv_value_freq: float) -> CandidateScore:
+                           dv_value_freq: float,
+                           freq_arr: np.ndarray,
+                           rms_arr: np.ndarray ) -> CandidateScore:
     """
     Create a CandidateScore object with all required fields from the dataset.
     """
@@ -103,9 +105,31 @@ def create_candidate_score(line_idx: int, cand_idx: int,
     
     # Scale all intensities and sort
     peak_ints_scaled = peak_ints * scale_value
+
+    peak_snr_arr = []
+    for sf in range(len(freqs)): #making a list of the snr of each scaled line intensity
+        indiv_line_idx =  np.argmin(np.abs(freq_arr - freqs[sf]))
+        rms_val = rms_arr[indiv_line_idx]
+        peak_indiv_snr = peak_ints_scaled[sf]/rms_val
+        peak_snr_arr.append(peak_indiv_snr)
+        '''
+        print('making candidate score')
+        print(freqs[sf])
+        print(freq_arr[indiv_line_idx])
+        print(peak_ints_scaled[sf])
+        print(rms_val)
+        print(peak_indiv_snr)
+        print('')
+        '''
+
+        
+
+
+    peak_snr_arr = np.array(peak_snr_arr)
     sorted_indices = np.argsort(peak_ints_scaled)[::-1]
     sorted_freqs = freqs[sorted_indices]
     sorted_ints = peak_ints_scaled[sorted_indices]
+    sorted_snr = peak_snr_arr[sorted_indices]
     
     max_int = sorted_ints[0] if len(sorted_ints) > 0 else 0
     
@@ -146,6 +170,7 @@ def create_candidate_score(line_idx: int, cand_idx: int,
         # Cached arrays for intensity checks
         sorted_frequencies=sorted_freqs,
         sorted_intensities=sorted_ints,
+        sorted_snr = sorted_snr,
         
         # Quality checks (will be set by perform_static_checks)
         has_invalid_atoms=False,
@@ -245,7 +270,7 @@ def load_dataset(direc: str, numMols: int = None) -> Tuple:
 
 def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict, 
                   validAtoms: List[str], dv_value_freq: float, 
-                  rms: float, peak_freqs_full: np.ndarray,
+                  freq_arr: np.ndarray, rms_arr: np.ndarray, peak_freqs_full: np.ndarray,
                   known_molecules: List[str] = None, consider_structure: bool = True) -> Tuple:
     """
     Main function to run the iterative spectrum assignment.
@@ -288,7 +313,8 @@ def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict,
     context = ScoringContext(
         dv_value_freq=dv_value_freq,
         temperature=temp,
-        rms=rms,
+        freq_arr=freq_arr,
+        rms_arr=rms_arr,
         max_observed_intensity=max(intensities),
         global_threshold_original=global_thresh,
         local_threshold=local_thresh,
@@ -325,7 +351,7 @@ def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict,
                     allSmiles, molForms, allIso, allFrequencies,
                     allQn, molTags, molLinelist,
                     actualFrequencies, intensities,
-                    splatDict, dv_value_freq
+                    splatDict, dv_value_freq, freq_arr, rms_arr
                 )
                 candidates.append(candidate)
             except Exception as e:
@@ -425,18 +451,18 @@ def save_results(assigner: IterativeSpectrumAssignment,
 
 
 def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_freq, 
-                       rms, peak_freqs_full, consider_structure, known_molecules=None):
+                       freq_arr, rms_arr, peak_freqs_full, consider_structure, known_molecules=None):
     """
     Complete assignment workflow with result saving.
     
     Args:
         temp: Temperature in Kelvin
         direc: Directory containing data files
-        subdirec: Directory in which output files will be saved.
         splatDict: Dictionary of spectral catalogs
-        valid_atoms: List of valid atomic symbols
+        validAtoms: List of valid atomic symbols
         dv_value_freq: Frequency tolerance
-        rms: RMS noise level
+        freq_arr: Array of frequencies matching the spectrum
+        rms_arr: Array of RMS noise levels at each frequency
         peak_freqs_full: Array of all peak frequencies
         known_molecules: Optional list of SMILES strings for molecules known to be present.
                         These molecules will always be maintained in the detected list.
@@ -451,7 +477,8 @@ def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_
         splatDict=splatDict,
         validAtoms=valid_atoms,
         dv_value_freq=dv_value_freq,
-        rms=rms,
+        freq_arr = freq_arr,
+        rms_arr = rms_arr,
         peak_freqs_full=peak_freqs_full,
         known_molecules=known_molecules,
         consider_structure=consider_structure

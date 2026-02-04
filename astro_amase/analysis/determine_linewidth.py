@@ -36,6 +36,7 @@ import statistics
 import numpy as np
 from ..constants import ckm
 from ..utils.astro_utils import find_peaks_local, sortTupleArray
+from ..data.load_data import find_peaks_by_chunks, map_rms_to_spectrum
 
 
 
@@ -193,9 +194,17 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
         if len(peak_indices) == 0:
             raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
     else:
-        peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 3), sigma=sigOG, local_rms=False, rms=rmsInp) 
-        if len(peak_indices) == 0:
-            raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+        if isinstance(rmsInp, dict):
+        #if type(rmsInp) == dict:
+            rms_full_arr_linewidth = map_rms_to_spectrum(freq_arr, rmsInp) #making rms array with inputted dictionary values
+            peak_indices = find_peaks_by_chunks(freq_arr,int_arr,rms_full_arr_linewidth, res=resolution,dv_value_freq=1.5, sigma = sigOG)
+            if len(peak_indices) == 0:
+                raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+        
+        else:
+            peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 3), sigma=sigOG, local_rms=False, rms=rmsInp) 
+            if len(peak_indices) == 0:
+                raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
 
     #peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),1), sigma=sigOG, local_rms=True, rms=rmsInp)
     peak_freqs = data.spectrum.frequency[peak_indices]
@@ -275,9 +284,16 @@ def find_linewidth(freq_arr, int_arr, resolution, sigOG, data, rmsInp):
         if len(peak_indices) == 0:
             raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
     else:
-        peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*medRoughWidth*2.355), sigma=sigOG, local_rms=False, rms=rmsInp) 
-        if len(peak_indices) == 0:
-            raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+        if isinstance(rmsInp, dict):
+        #if type(rmsInp) == dict:
+            rms_full_arr_linewidth = map_rms_to_spectrum(freq_arr, rmsInp) #making rms array with inputted dictionary values
+            peak_indices = find_peaks_by_chunks(freq_arr,int_arr,rms_full_arr_linewidth, res=resolution,dv_value_freq=2*medRoughWidth*2.355, sigma = sigOG)
+            if len(peak_indices) == 0:
+                raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
+        else:
+            peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*medRoughWidth*2.355), sigma=sigOG, local_rms=False, rms=rmsInp) 
+            if len(peak_indices) == 0:
+                raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level.")
 
     #peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),1), sigma=sigOG, local_rms=True, rms=rmsInp)
     peak_freqs = data.spectrum.frequency[peak_indices]

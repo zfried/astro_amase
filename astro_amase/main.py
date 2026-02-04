@@ -112,7 +112,7 @@ def assign_observations(
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
             (no molecules removed). Otherwise must be 2 or greater. Default: 0
         - save_name: str, optional
-            Name of subdirectory that will be created within directory_path to store output files. Default: no_name.
+            Name of subdirectory that will be created within directory_path to store output files. Default: default_name.
         - overwrite_old_files: bool, optional
             If the save_name subdirectory already exists within directory_path and overwrite_old_files is True,
             the old output files in this subdirectory will be overwritten. If the save_name subdirectory
@@ -631,7 +631,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
             (no molecules removed). Otherwise must be 2 or greater. Default: 0
         - save_name: str, optional
-            Name of subdirectory that will be created within directory_path to store output files. Default: no_name.
+            Name of subdirectory that will be created within directory_path to store output files. Default: default_name.
         - overwrite_old_files: bool, optional
             If the save_name subdirectory already exists within directory_path and overwrite_old_files is True,
             the old output files in this subdirectory will be overwritten. If the save_name subdirectory
@@ -867,7 +867,16 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         user_outputs['peak_df'],
         user_outputs['peak_df_3sigma']
     )
-    print(f"RMS noise: {peak_data['rms']:.2g} K")
+
+    if user_outputs['rms_noise'] == None:
+        print(f"RMS noise: {peak_data['rms']:.2g} K")
+    else:
+        #if type(user_outputs['rms_noise']) == dict:
+        if isinstance(user_outputs['rms_noise'], dict):
+            print('Inputted following RMS noise dictionary: ',user_outputs['rms_noise'])
+        else:
+            print(f"RMS noise: {peak_data['rms']:.2g} K")
+
     
     # Create dataset
     print("\n=== Creating Molecular Candidate Dataset ===")
@@ -897,7 +906,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         splatDict,
         user_outputs['valid_atoms'],
         dv_value_freq,
-        peak_data['rms'],
+        peak_data['freq_arr'],
+        peak_data['rms_full_arr'],
         peak_data['peak_freqs_full'],
         user_outputs['consider_structure'],
         known_molecules=user_outputs.get('known_molecules', None),
@@ -916,7 +926,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['save_individual_contributions'], user_outputs['fitting_iterations']
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['save_individual_contributions'], peak_data['rms_full_arr'], user_outputs['fitting_iterations']
     )
 
     fit_time = time.perf_counter()
@@ -940,6 +950,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     print('  - output_report.txt: Detailed assignment report')
     print('  - column_density_results.csv: Best-fit column densities')
     
+
+
     # Return results
     results = {
         'assigner': assigner,
@@ -950,7 +962,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         'temperature': float(best_temp),
         'linewidth': float(dv_value),
         'linewidth_freq': float(dv_value_freq),
-        'rms': float(peak_data['rms']),
+        'rms': peak_data['rms'],
         'resolution': float(resolution),
         'source_size': float(user_outputs['source_size']),
         '_internal_data': internal_data,
@@ -1049,7 +1061,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             molecule filtering followed by refitting. Set to 0 to iterate until convergence 
             (no molecules removed). Otherwise must be 2 or greater. Default: 0
         - save_name: str, optional
-            Name of subdirectory that will be created within directory_path to store output files. Default: no_name.
+            Name of subdirectory that will be created within directory_path to store output files. Default: default_name.
         - overwrite_old_files: bool, optional
             If the save_name subdirectory already exists within directory_path and overwrite_old_files is True,
             the old output files in this subdirectory will be overwritten. If the save_name subdirectory
@@ -1181,7 +1193,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'vlsr_mols': kwargs.get('vlsr_mols', 'all'),
         'stricter': kwargs.get('stricter', False), #testing some things out with the parameter
         'fitting_iterations': kwargs.get('fitting_iterations',0),
-        'save_name': kwargs.get('save_name', 'no_name'),
+        'save_name': kwargs.get('save_name', 'default_name'),
         'overwrite_old_files': kwargs.get('overwrite_old_files', False),
         'consider_structure': kwargs.get('consider_structure', True),
         'save_individual_contributions': kwargs.get('save_individual_contributions', False)

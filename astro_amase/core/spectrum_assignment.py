@@ -80,6 +80,7 @@ class CandidateScore:
     # Cached intensity check results (NEVER CHANGES)
     sorted_frequencies: np.ndarray = field(repr=False)
     sorted_intensities: np.ndarray = field(repr=False)
+    sorted_snr: np.ndarray = field(repr=False)
     
     # Cached quality checks (CALCULATED ONCE, NEVER CHANGES)
     has_invalid_atoms: bool = False
@@ -133,11 +134,11 @@ class SpectralLine:
     """Represents a single observed spectral line with all its candidate molecules."""
     
     def __init__(self, frequency: float, intensity: float, 
-                 line_index: int, rms: float):
+                 line_index: int):
         self.frequency = frequency
         self.intensity = intensity
         self.line_index = line_index
-        self.rms = rms
+        #self.rms = rms
         
         # Candidates
         self.candidates: List[CandidateScore] = []
@@ -185,6 +186,7 @@ class SpectralLine:
                 candidate.formula,
                 candidate.sorted_frequencies,
                 candidate.sorted_intensities,
+                candidate.sorted_snr,
                 candidate.catalog_frequency
             )
             
@@ -391,7 +393,9 @@ class ScoringContext:
     # Fixed parameters (never change)
     dv_value_freq: float
     temperature: float
-    rms: float
+    #rms: float
+    freq_arr: np.ndarray
+    rms_arr: np.ndarray
     max_observed_intensity: float
     global_threshold_original: float = 93.5  # Original threshold for assignment
     local_threshold: float = 0.7
@@ -482,11 +486,12 @@ class ScoringContext:
     def check_strong_lines_missing(self, formula: str, 
                                    sorted_freqs: np.ndarray,
                                    sorted_ints: np.ndarray,
+                                   sorted_snr: np.ndarray,
                                    closest_freq: float) -> bool:
         """Check if predicted strong lines are missing from spectrum."""
         from ..utils.astro_utils import checkAllLines
         return checkAllLines(
-            formula, self.rms, sorted_freqs, sorted_ints,
+            formula, sorted_freqs, sorted_ints, sorted_snr,
             self.dv_value_freq, closest_freq, self.peak_freqs_full
         )
     
@@ -558,7 +563,7 @@ class IterativeSpectrumAssignment:
         
         # Create all spectral lines
         self.lines: List[SpectralLine] = [
-            SpectralLine(freq, inten, idx, context.rms)
+            SpectralLine(freq, inten, idx)
             for idx, (freq, inten) in enumerate(zip(frequencies, intensities))
         ]
         
@@ -1133,6 +1138,7 @@ class IterativeSpectrumAssignment:
         
         for i in range(len(self.lines)):
             #print('current detected')
+            #print(i)
             #print(self.context.detected_smiles)
             # Score and assign current line
             assigned, added_to_detected = self.score_and_assign_line(i)
