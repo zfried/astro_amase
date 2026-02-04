@@ -8,6 +8,7 @@ This guide provides detailed information about all parameters available in `astr
 - [Observation Configuration](#observation-configuration)
 - [Advanced Parameters](#advanced-parameters)
 - [Output Configuration](#output-configuration)
+- [Tips and Best Practices](#tips-and-best-practices)
 
 ---
 
@@ -70,7 +71,9 @@ This guide provides detailed information about all parameters available in `astr
        (27000.0, 31500.0): 0.034
    }
    ```
-In this case, the dictionary keys are the frequency range in MHz and the values are the noise levels in that range. If there are frequency gaps in the dictionary, the higher noise value of the surrounding frequency regions will be used. 
+
+**Notes:**
+- When using a frequency-dependent dictionary, the dictionary keys are frequency ranges in MHz `(freq_min, freq_max)`, and values are RMS noise levels in Kelvin. For frequency gaps between defined ranges, the higher RMS of the adjacent regions is used. If the dictionary doesn't cover the full spectrum, the first and last RMS values are extended to the spectrum edges.
 
 **Recommendations:**
 - Using auto-calculation is generally the best approach but can determine too high of a noise level in line-dense surveys
@@ -135,7 +138,7 @@ beam_minor_axis=0.4
 
 **Notes:**
 - **force_ignore_molecules:** Can add molecules to this list if there are false-positive assignments
-- **force_include_molecules:** Can add molecules to test if it is present in the data
+- **force_include_molecules:** Can add molecules to test if they are present in the data
 - **Important:** Molecule names in list must match the first columns of the `all_cdms_final_official.csv` or `all_jpl_final_offiical.csv` files downloaded from [Dropbox](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). For example, `CH3OH, vt = 0 - 2` and `HC3N, (0,0,0,0)`. These are the names stored in the `column_density_results.csv` output file, so they can be copied from there into the `force_ignore_molecules` list if needed.
 
 
@@ -146,8 +149,8 @@ beam_minor_axis=0.4
 | Parameter | Type | Default | Description | Recommendation |
 |-----------|------|---------|-------------|----------------|
 | `column_density_range` | `list[float, float]` | `[1e10, 1e20]` | Min/max column density bounds [min, max] in cm⁻² | Can adjust based on source but default is generally fine|
-| `fitting_iterations` | `int` | `0` | Number of fitting iterations. `0` = iterate to convergence | Use `0` for automatic; `≥2` for fixed iterations. Highly recommended to use `0`. |
-| `stricter` | `bool` | `False` | Apply additional filtering checks when removing molecules | Set `True` if some false positive assignments. |
+| `fitting_iterations` | `int` | `0` | Number of fitting iterations. `0` = iterate to convergence | Use `0` for automatic; `≥2` for fixed iterations. Highly recommended to use `0` |
+| `stricter` | `bool` | `False` | Apply additional filtering checks when removing molecules | Set `True` if some false positive assignments |
 
 **Iteration Behavior:**
 - `fitting_iterations=0`: Iterates until no molecules are removed (convergence)
@@ -179,6 +182,9 @@ beam_minor_axis=0.4
 - Sometimes it can struggle with assigning larger cyanopolyynes or cummulene molecules. For example, if HC7N, HC9N, C3S, H2C4, H2C6, etc. are expected to be present, I would recommend initializing the `known_molecules` list with these SMILES strings (along with smaller species like HC3N, HC5N and C2S).
 - Sometimes it can also struggle with acetone `CC(C)=O`. Can also initialize `known_molecules` list with this SMILES string (along with common molecules like methanol, formaldehyde, ethanol, etc.) if hot core source.
 
+**Recommendations:**
+- Cold Cloud: `['C#CC#N', 'C#CC#CC#N', 'C#CC#CC#CC#N', 'C#CC#CC#CC#CC#N', '[C]=C=S', '[C]=C=C=S', '[C]=C=C=C', '[C]=C=C=C=C']`
+- Hot Core: `['[C-]#[O+]', 'CO', 'CCO', 'C=O', 'COC=O', 'CC#N', 'CC(C)=O']`
 ---
 
 ## Output Configuration
@@ -245,9 +251,8 @@ The function returns a dictionary with:
 
 ### Common Pitfalls:
 - ❌ Providing VLSR without exact temperature
-- ❌ Using `source_size` when source doesn't fill beam
-- ❌ Setting `sigma_threshold` or `rms_noise` too low (creates false detections)
-- ❌ Restricting `valid_atoms` incorrectly (misses real molecules or allows too many molecules)
+- ❌ Setting `sigma_threshold` or `rms_noise` too low (creates false detections) or too high (not finding enough lines)
+- ❌ Restricting `valid_atoms` incorrectly (misses real molecules or allows false-positive molecules)
 
 
 ---
