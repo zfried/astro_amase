@@ -2,10 +2,13 @@
 
 **Automated Molecular Assignment and Source Parameter Estimation in Radio Astronomical Observations**
 
-[![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+## Quick Links
 
-Astro AMASE is a comprehensive Python package for automated molecular line identification in radio astronomical observations. It combines spectroscopic analysis, structural relevance scoring, and best-fit modeling to provide robust molecular assignments.
+- ⚙️ [Parameter Guide](PARAMETERS.md)
+- 📓 [Example Notebook](notebooks/example_notebook.ipynb)
+- 📦 [Required Database Files (Dropbox)](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0)
 
+Astro AMASE is a comprehensive Python package for automated molecular line identification...
 ## Features
 
 ✨ **Automated Analysis Pipeline**
@@ -51,6 +54,17 @@ cd astro_amase
 pip install -e .
 ```
 
+## Documentation
+
+📚 **[Parameter Guide (PARAMETERS.md)](PARAMETERS.md)** - Comprehensive guide to all available parameters, including:
+- Required and optional parameters
+- Parameter recommendations for different use cases
+- Common use case examples
+- Tips and best practices
+
+📓 **[Example Notebook](notebooks/example_notebook.ipynb)** - Complete workflows and usage examples
+
+
 ## Quick Start
 
 ### Required Database Files
@@ -66,6 +80,9 @@ The example notebook demonstrates:
 - Parameter selection
 - Visualization techniques
 - Post-processing and interpretation of results
+
+**For detailed parameter documentation, see [PARAMETERS.md](PARAMETERS.md).**
+
 
 ### Basic Usage
 
