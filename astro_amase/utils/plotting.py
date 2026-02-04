@@ -16,6 +16,7 @@ from .molsim_utils import load_obs, find_limits
 from .molsim_utils import find_peaks
 from ..constants import ckm
 from ..data.create_dataset import apply_vlsr_shift
+from ..data.load_data import map_rms_to_spectrum
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 
@@ -484,7 +485,7 @@ def plot_from_saved(spectrum_path, directory_path, column_density_csv, stored_js
     # Display in notebook
     show(layout)
 
-def get_individual_plots(spectrum_path, directory_path, column_density_csv, stored_json, mols_to_display = ['all'], minimum_intensity = 'default'):
+def get_individual_plots(spectrum_path, directory_path, save_path, column_density_csv, stored_json, mols_to_display = ['all'], minimum_intensity = 'default'):
     """
     Generate individual peak plots for assigned molecules in a molecular spectrum.
     
@@ -500,6 +501,8 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
     directory_path : str
         Path to the directory containing molecular catalogs (CDMS and JPL pickle files)
         and reference CSV files.
+    save_path: str
+        Path to the directory where you want the plots to be saved.
     column_density_csv : str
         Path to CSV file containing assigned molecules and their fitted column densities.
         Expected columns: 'molecule', 'column_density'.
@@ -573,14 +576,21 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
     resolution = determined_params['resolution']
     dv_value_freq = determined_params['linewidth_mhz']
     rms_noise = determined_params['rms_noise']
+    #print(rms_noise)
+    if isinstance(rms_noise, dict):
+        rms_full_arr = map_rms_to_spectrum(freq_arr, rms_noise)
+    else:
+        rms_full_arr = np.full_like(freq_arr, rms_noise)
+
 
     #print('temp',temp)
     #print('vlsr_value', vlsr_value )
     
     if minimum_intensity == 'default': #if default, get all lines down to the rms noise
-        minimum_intensity = rms_noise
+        minimum_intensity_arr = rms_full_arr
     else:
-        minimum_intensity = minimum_intensity #otherwise, use the inputted value
+        #minimum_intensity = minimum_intensity 
+        minimum_intensity_arr = np.full_like(freq_arr, minimum_intensity) #otherwise, use the inputted value
 
     fitted_columns = []
     mol_list = []
@@ -688,11 +698,18 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
        
         #finding peaks in simulation
         peak_indicesIndiv = find_peaks(sim.spectrum.freq_profile, sim.spectrum.int_profile, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq), is_sim=True)
-        
+        peak_snr_arr = []
         if len(peak_indicesIndiv) > 0:
             peak_freqs2 = sim.spectrum.freq_profile[peak_indicesIndiv]
             peak_ints2 = abs(sim.spectrum.int_profile[peak_indicesIndiv])
-            mask = peak_ints2 > minimum_intensity #keeping only the transitions above a minimum intensity
+            for sf in range(len(peak_freqs2)):
+                indiv_line_idx =  np.argmin(np.abs(freq_arr - peak_freqs2[sf]))
+                minimum_rms_val = minimum_intensity_arr[indiv_line_idx]
+                peak_indiv_snr = peak_ints2[sf]/minimum_rms_val
+                peak_snr_arr.append(peak_indiv_snr)
+            
+            peak_snr_arr = np.array(peak_snr_arr)
+            mask = peak_snr_arr >= 1 #keeping only the transitions above a minimum intensity
             # Filter both arrays
             peak_ints2 = peak_ints2[mask]
             peak_freqs2 = peak_freqs2[mask]
@@ -715,7 +732,7 @@ def get_individual_plots(spectrum_path, directory_path, column_density_csv, stor
             # Create PDF to save all peaks
             # Create PDF to save all peaks
             save_label = label.replace('/','_')
-            pdf_filename = os.path.join(directory_path,f"{save_label}_peaks.pdf")  # m is your molecule name
+            pdf_filename = os.path.join(save_path,f"{save_label}_peaks.pdf")  # m is your molecule name
             with PdfPages(pdf_filename) as pdf:
                 n_peaks = len(peak_freqs2)
                 n_cols = 3
