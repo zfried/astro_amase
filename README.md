@@ -208,7 +208,7 @@ results = astro_amase.assign_observations(...)
 astro_amase.show_fit_in_notebook(results)
 
 # Or display only specific molecules
-astro_amase.show_fit_in_notebook(results, mols_to_display=['CH3OH', 'H2CO'])
+astro_amase.show_fit_in_notebook(results, mols_to_display=['CH3OH, vt = 0 - 2', 'H2CO'])
 ```
 
 #### Recreate Plots from Saved Data
@@ -230,7 +230,7 @@ astro_amase.plot_from_saved(
     directory_path='./directory/',
     column_density_csv='./directory/column_density_results.csv',
     stored_json='./directory/output_parameters.json',
-    mols_to_display=['CH3OH', 'CH3CN', 'H2CO']
+    mols_to_display=['CH3OH, vt = 0 - 2', 'HC3N, (0,0,0,0)', 'H2CO']
 )
 ```
 
