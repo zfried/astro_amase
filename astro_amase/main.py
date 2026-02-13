@@ -865,15 +865,18 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         user_outputs['bmin'],
         user_outputs['rms_noise'],
         user_outputs['peak_df'],
-        user_outputs['peak_df_3sigma']
+        user_outputs['peak_df_3sigma'],
+        dv_value_freq_og
     )
 
+    noise_is_dict = False
     if user_outputs['rms_noise'] == None:
         print(f"RMS noise: {peak_data['rms']:.2g} K")
     else:
         #if type(user_outputs['rms_noise']) == dict:
         if isinstance(user_outputs['rms_noise'], dict):
             print('Inputted following RMS noise dictionary: ',user_outputs['rms_noise'])
+            noise_is_dict = True
         else:
             print(f"RMS noise: {peak_data['rms']:.2g} K")
 
@@ -910,6 +913,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         peak_data['rms_full_arr'],
         peak_data['peak_freqs_full'],
         user_outputs['consider_structure'],
+        noise_is_dict=noise_is_dict,
         known_molecules=user_outputs.get('known_molecules', None),
 
     )

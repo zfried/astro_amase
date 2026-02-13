@@ -70,7 +70,8 @@ def create_candidate_score(line_idx: int, cand_idx: int,
                            intensities: List, splatDict: Dict,
                            dv_value_freq: float,
                            freq_arr: np.ndarray,
-                           rms_arr: np.ndarray ) -> CandidateScore:
+                           rms_arr: np.ndarray,
+                           noise_is_dict: bool ) -> CandidateScore:
     """
     Create a CandidateScore object with all required fields from the dataset.
     """
@@ -103,24 +104,38 @@ def create_candidate_score(line_idx: int, cand_idx: int,
     else:
         scale_value = observed_int / int_value
     
+    
     # Scale all intensities and sort
     peak_ints_scaled = peak_ints * scale_value
 
-    peak_snr_arr = []
-    for sf in range(len(freqs)): #making a list of the snr of each scaled line intensity
-        indiv_line_idx =  np.argmin(np.abs(freq_arr - freqs[sf]))
-        rms_val = rms_arr[indiv_line_idx]
-        peak_indiv_snr = peak_ints_scaled[sf]/rms_val
-        peak_snr_arr.append(peak_indiv_snr)
-        '''
-        print('making candidate score')
-        print(freqs[sf])
-        print(freq_arr[indiv_line_idx])
-        print(peak_ints_scaled[sf])
-        print(rms_val)
-        print(peak_indiv_snr)
-        print('')
-        '''
+    if noise_is_dict:
+        peak_snr_arr = []
+        for sf in range(len(freqs)): #making a list of the snr of each scaled line intensity
+            indiv_line_idx =  np.argmin(np.abs(freq_arr - freqs[sf]))
+            rms_val = rms_arr[indiv_line_idx]
+            peak_indiv_snr = peak_ints_scaled[sf]/rms_val
+            peak_snr_arr.append(peak_indiv_snr)
+    else:
+        peak_snr_arr = []
+        rms_val = rms_arr[0]
+        for sf in range(len(freqs)): #making a list of the snr of each scaled line intensity
+            peak_indiv_snr = peak_ints_scaled[sf]/rms_val
+            peak_snr_arr.append(peak_indiv_snr)
+        
+
+
+
+
+
+    '''
+    print('making candidate score')
+    print(freqs[sf])
+    print(freq_arr[indiv_line_idx])
+    print(peak_ints_scaled[sf])
+    print(rms_val)
+    print(peak_indiv_snr)
+    print('')
+    '''
 
         
 
@@ -271,7 +286,7 @@ def load_dataset(direc: str, numMols: int = None) -> Tuple:
 def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict, 
                   validAtoms: List[str], dv_value_freq: float, 
                   freq_arr: np.ndarray, rms_arr: np.ndarray, peak_freqs_full: np.ndarray,
-                  known_molecules: List[str] = None, consider_structure: bool = True) -> Tuple:
+                  known_molecules: List[str] = None, consider_structure: bool = True, noise_is_dict = False) -> Tuple:
     """
     Main function to run the iterative spectrum assignment.
     
@@ -351,7 +366,7 @@ def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict,
                     allSmiles, molForms, allIso, allFrequencies,
                     allQn, molTags, molLinelist,
                     actualFrequencies, intensities,
-                    splatDict, dv_value_freq, freq_arr, rms_arr
+                    splatDict, dv_value_freq, freq_arr, rms_arr, noise_is_dict
                 )
                 candidates.append(candidate)
             except Exception as e:
@@ -451,7 +466,7 @@ def save_results(assigner: IterativeSpectrumAssignment,
 
 
 def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_freq, 
-                       freq_arr, rms_arr, peak_freqs_full, consider_structure, known_molecules=None):
+                       freq_arr, rms_arr, peak_freqs_full, consider_structure, noise_is_dict, known_molecules=None):
     """
     Complete assignment workflow with result saving.
     
@@ -481,7 +496,8 @@ def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_
         rms_arr = rms_arr,
         peak_freqs_full=peak_freqs_full,
         known_molecules=known_molecules,
-        consider_structure=consider_structure
+        consider_structure=consider_structure,
+        noise_is_dict = noise_is_dict
     )
     
     # Save results

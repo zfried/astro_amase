@@ -86,7 +86,7 @@ def load_data_original(specPath, observation_type, bmaj, bmin, rmsInp):
     return data, ll0, ul0, freq_arr, int_arr, resolution, min_separation, bandwidth, rms
 
 
-def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, bmin, rmsInp, peak_df, peak_df_3sigma):
+def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, bmin, rmsInp, peak_df, peak_df_3sigma, dv_value_freq_og):
 
     """
     Load spectrum and identify significant spectral line peaks.
@@ -140,7 +140,8 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
             resolution = np.median(freq_differences)
         #finding all peak frequencies and intensities in the spectrum at the inputted sigma level
         if rmsInp is None:
-            peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sigOG, local_rms=True, rms=rmsInp) 
+            peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq_og), sigma=sigOG, local_rms=True, rms=rmsInp) 
+
             if len(peak_indices) == 0:
                 raise ValueError(f"Error: No peaks found at {sigOG} sigma or stronger. You may need to adjust the rms noise level using the rms_noise input parameter.")
             peak_freqs = data.spectrum.frequency[peak_indices]
@@ -148,7 +149,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
         else:
             #if type(rmsInp) == dict: #checking if rms input was a dictionary
             if isinstance(rmsInp, dict):
-                peak_indices = find_peaks_by_chunks(freq_arr,int_arr,rms_full_arr, res=resolution,dv_value_freq=dv_value_freq, sigma = sigOG)
+                peak_indices = find_peaks_by_chunks(freq_arr,int_arr,rms_full_arr, res=resolution,dv_value_freq=2*dv_value_freq_og, sigma = sigOG)
                 #print('len peak indices')
                 #print(len(peak_indices))
 
@@ -158,7 +159,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
                 peak_ints = abs(data.spectrum.Tb[peak_indices])
 
             else:
-                peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq), sigma=sigOG, local_rms=False, rms=rmsInp) 
+                peak_indices = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr), 2*dv_value_freq_og), sigma=sigOG, local_rms=False, rms=rmsInp) 
                 #print('len peak indices')
                 #print(len(peak_indices))
                 if len(peak_indices) == 0:
@@ -182,7 +183,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
 
         #storing all 3 sigma lines. Needed for future intensity checks
         if rmsInp is None:
-            peak_indices_full = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq), sigma=3.0, local_rms = False, rms=rmsInp)
+            peak_indices_full = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq_og), sigma=3.0, local_rms = False, rms=rmsInp)
             if len(peak_indices_full) == 0:
                 raise ValueError(f"Error: Error in peak finding.  Please manually adjust the rms noise level using the rms_noise input parameter.")
             peak_freqs_full = data.spectrum.frequency[peak_indices_full]
@@ -190,7 +191,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
         else:
             #if type(rmsInp) == dict:
             if isinstance(rmsInp, dict):
-                peak_indices_full = find_peaks_by_chunks(freq_arr,int_arr,rms_full_arr, res=resolution,dv_value_freq=dv_value_freq, sigma = 3.0)
+                peak_indices_full = find_peaks_by_chunks(freq_arr,int_arr,rms_full_arr, res=resolution,dv_value_freq=0.5*dv_value_freq_og, sigma = 3.0)
                 if len(peak_indices_full) == 0:
                     raise ValueError(f"Error: Error in peak finding. Please manually adjust the rms noise level using the rms_noise input parameter.")
                 peak_freqs_full = data.spectrum.frequency[peak_indices_full]
@@ -199,7 +200,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
                 #print(len(peak_indices_full))
 
             else:
-                peak_indices_full = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq), sigma=3.0, local_rms = False, rms=rmsInp)
+                peak_indices_full = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq_og), sigma=3.0, local_rms = False, rms=rmsInp)
                 if len(peak_indices_full) == 0:
                     raise ValueError(f"Error: Error in peak finding. Please manually adjust the rms noise level using the rms_noise input parameter.")
                 peak_freqs_full = data.spectrum.frequency[peak_indices_full]
@@ -227,7 +228,7 @@ def load_data_get_peaks(specPath, sigOG, dv_value_freq, observation_type, bmaj, 
         spectrum_indices = []
         peak_indices = []
         rms = rmsInp
-        peak_indices_full = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq), sigma=3.0, local_rms = False, rms=rmsInp)
+        peak_indices_full = find_peaks_local(freq_arr, int_arr, res=resolution, min_sep=max(resolution * ckm / np.amax(freq_arr),0.5*dv_value_freq_og), sigma=3.0, local_rms = False, rms=rmsInp)
         if len(peak_indices_full) == 0:
                 raise ValueError(f"Error: Error in peak finding. Please manually adjust the rms noise level using the rms_noise input parameter.")
         peak_freqs_full = data.spectrum.frequency[peak_indices_full]
@@ -414,7 +415,7 @@ def find_peaks_by_chunks(freq_arr, int_arr, rms_arr, res, dv_value_freq, is_sim=
         #chunk_peaks = find_peaks_local(chunk_freq, chunk_int, res, min_sep, 
         #                         is_sim=is_sim, sigma=sigma, kms=kms, rms=chunk_rms)
 
-        chunk_peaks = find_peaks_local(chunk_freq, chunk_int, res=res, min_sep=max(res * ckm / np.amax(chunk_freq), 2*dv_value_freq), sigma=sigma, local_rms=False, rms=chunk_rms)
+        chunk_peaks = find_peaks_local(chunk_freq, chunk_int, res=res, min_sep=max(res * ckm / np.amax(chunk_freq), dv_value_freq), sigma=sigma, local_rms=False, rms=chunk_rms)
         
         # Map chunk-relative indices back to original array indices
         if len(chunk_peaks) > 0:

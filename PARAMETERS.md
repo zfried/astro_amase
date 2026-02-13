@@ -58,7 +58,7 @@ This guide provides detailed information about all parameters available in `astr
 | Parameter | Type | Default | Description | Recommendation |
 |-----------|------|---------|-------------|----------------|
 | `sigma_threshold` | `float` | `5.0` | Sigma threshold for line detection |Don't go too far below 5σ. Molecules whose maximum simulated intensity is below 2.5σ are removed from the assignment. |
-| `rms_noise` | `None`, `float`, or `dict` | `None` | RMS noise level(s). Auto-calculated if not provided | `None` will automatically calculate the noise level in each region of the spectrum. If a `float` is entered, this value will be used for the entire frequency range. The noise level in each frequency range can also be inputted manually using a `dict`. |
+| `rms_noise` | `None`, `float`, or `dict` | `None` | RMS noise level(s). Auto-calculated if not provided | `None` will automatically calculate the noise level in each region of the spectrum. If a `float` is entered, this value will be used for the entire frequency range. The noise level in each frequency range can also be inputted manually using a `dict`. Inputting a dictionary makes the process much slower.|
 
 **RMS Noise Options:**
 1. **Auto-calculate (default):** `rms_noise=None`
