@@ -109,12 +109,23 @@ def create_candidate_score(line_idx: int, cand_idx: int,
     peak_ints_scaled = peak_ints * scale_value
 
     if noise_is_dict:
+        '''
         peak_snr_arr = []
         for sf in range(len(freqs)): #making a list of the snr of each scaled line intensity
             indiv_line_idx =  np.argmin(np.abs(freq_arr - freqs[sf]))
             rms_val = rms_arr[indiv_line_idx]
             peak_indiv_snr = peak_ints_scaled[sf]/rms_val
             peak_snr_arr.append(peak_indiv_snr)
+        '''
+        # Find insertion indices (closest frequency positions)
+        indiv_line_indices = np.searchsorted(freq_arr, freqs)
+
+        # Clip indices to valid range (handles edge cases)
+        indiv_line_indices = np.clip(indiv_line_indices, 0, len(freq_arr) - 1)
+
+        # Vectorized SNR calculation
+        rms_vals = rms_arr[indiv_line_indices]
+        peak_snr_arr = peak_ints_scaled / rms_vals
     else:
         peak_snr_arr = []
         rms_val = rms_arr[0]

@@ -30,6 +30,8 @@ Astro AMASE is a comprehensive Python package for automated molecular line ident
 
 ## Installation
 
+**⚠️ Update (Feb 13, 2026):** A notable efficiency fix was released today. Please reinstall if you have an existing installation.
+
 ### Python Version Requirement
 
 **Python 3.11 is recommended.** While the package supports Python 3.8+, some dependencies may not have wheels available for Python 3.13 or newer. Python 3.9, 3.10, and 3.11 are well-supported.
