@@ -107,7 +107,8 @@ def create_candidate_score(line_idx: int, cand_idx: int,
     
     # Scale all intensities and sort
     peak_ints_scaled = peak_ints * scale_value
-
+    #print('noise is dict')
+    #print(noise_is_dict)
     if noise_is_dict:
         '''
         peak_snr_arr = []
@@ -126,6 +127,19 @@ def create_candidate_score(line_idx: int, cand_idx: int,
         # Vectorized SNR calculation
         rms_vals = rms_arr[indiv_line_indices]
         peak_snr_arr = peak_ints_scaled / rms_vals
+
+        #print(freqs[0:5])
+        #print(rms_vals[:5])
+        #print(freqs[-5:])
+        #print(rms_vals[-5:])
+        #print('')
+
+        #for fr in range(len(freqs)):
+        #    if freqs[fr] > 2.9e5 and rms_vals[fr] != 0.007:
+        #        print('here')
+        #        print(freqs[fr])
+        #        print(rms_vals[fr])
+
     else:
         peak_snr_arr = []
         rms_val = rms_arr[0]

@@ -1233,8 +1233,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                         #max_obs_intensity_in_window = max(obs_intensity_in_window)
                         
                         # Calculate the integral (using trapezoidal rule)
-                        integral_sim = np.trapz(sim_intensity_in_window, freqs_in_window)
-                        integral_obs = np.trapz(obs_intensity_in_window, freqs_in_window)
+                        integral_sim = np.trapezoid(sim_intensity_in_window, freqs_in_window)
+                        integral_obs = np.trapezoid(obs_intensity_in_window, freqs_in_window)
                         if (integral_obs/integral_sim) <= 0.30:
                             missingCount += 1
 
@@ -1501,8 +1501,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                         sim_intensity_in_window = abs(indiv_intensity[freq_window])
                         obs_intensity_in_window = abs(y_exp_check[freq_window])
                         
-                        integral_sim = np.trapz(sim_intensity_in_window, freqs_in_window)
-                        integral_obs = np.trapz(obs_intensity_in_window, freqs_in_window)
+                        integral_sim = np.trapezoid(sim_intensity_in_window, freqs_in_window)
+                        integral_obs = np.trapezoid(obs_intensity_in_window, freqs_in_window)
                         if (integral_obs/integral_sim) <= 0.30:
                             missingCount += 1
 

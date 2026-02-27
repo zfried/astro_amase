@@ -34,7 +34,7 @@ setup(
     python_requires=">=3.8",
     install_requires=[
         "pandas>=1.3.0",
-        "numpy>=1.20.0",
+        "numpy>=2.0.0",
         "torch>=1.10.0",
         "rdkit>=2021.09.1",
         "scipy>=1.7.0,<1.14.0",
