@@ -863,10 +863,63 @@ def plot_simulation_vs_experiment_html_bokeh_compact_float32(
 
 
 
+def write_fit_diagnostics(subfolder_path, initial_labels, removal_log, final_labels):
+    """
+    Write a human-readable fit diagnostics report to a text file.
+
+    Records every molecule that was removed during iterative fitting, the iteration
+    in which it was removed, and the first reason the removal criterion was triggered.
+    Also lists the molecules retained in the final fit.
+
+    Parameters
+    ----------
+    subfolder_path : str
+        Directory where ``fit_diagnostics.txt`` will be written.
+    initial_labels : list of str
+        All molecule names present at the start of fitting (after initial QC).
+    removal_log : dict
+        Mapping of ``{mol_name: (iteration, reason_str)}`` recording the first
+        removal reason for each deleted molecule.
+    final_labels : list of str
+        Molecule names retained after all iterations.
+    """
+    diag_path = os.path.join(subfolder_path, 'fit_diagnostics.txt')
+    with open(diag_path, 'w') as f:
+        f.write('=' * 70 + '\n')
+        f.write('  FIT DIAGNOSTICS REPORT\n')
+        f.write('=' * 70 + '\n\n')
+
+        f.write(f'Molecules entering fit  : {len(initial_labels)}\n')
+        f.write(f'Molecules removed       : {len(removal_log)}\n')
+        f.write(f'Molecules retained      : {len(final_labels)}\n\n')
+
+        f.write('-' * 70 + '\n')
+        f.write('  REMOVED MOLECULES\n')
+        f.write('-' * 70 + '\n\n')
+
+        if removal_log:
+            # Sort by iteration first, then alphabetically
+            for mol, (iteration, reason) in sorted(removal_log.items(), key=lambda x: (x[1][0], x[0])):
+                f.write(f'  {mol}\n')
+                f.write(f'    Iteration : {iteration}\n')
+                f.write(f'    Reason    : {reason}\n\n')
+        else:
+            f.write('  (no molecules removed)\n\n')
+
+        f.write('-' * 70 + '\n')
+        f.write('  RETAINED MOLECULES\n')
+        f.write('-' * 70 + '\n\n')
+
+        for mol in sorted(final_labels):
+            f.write(f'  {mol}\n')
+
+        f.write('\n' + '=' * 70 + '\n')
+
+
 def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_value_freq, ll0, ul0, 
              vlsr_value, actualFrequencies, intensities, rms, cont, force_include_mols, 
              sourceSize, column_density_range, resolution, dv_value_freq_og, stricter, save_individual_contributions, rms_arr_full,
-             number_iterations=0):
+             number_iterations=0, save_diagnostics=False):
     """
     Execute complete spectral fitting workflow with quality control and visualization.
     
@@ -993,6 +1046,11 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
 
     assignedMols = [i for i in assignedMols if i[0] not in delList1 and i[0] not in blended_mols_final]
 
+    # Diagnostics: log molecules removed by pre-fit QC
+    removal_log = {}  # {mol_name: (iteration, reason)}
+    for mol in delList1:
+        removal_log[mol] = (0, 'Hyperfine duplicate: parent isotopologue present in assignment list')
+
     # Quality control for duplicated entries
     result = {}
     for key, source in assignedMols:
@@ -1060,6 +1118,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
     initial_columns = np.full(len(mol_list), first_guess)
     bounds = (np.full(len(mol_list), column_density_range[0]), np.full(len(mol_list), column_density_range[1]))
     y_exp = np.array(dataScrape.spectrum.Tb)
+
+    initial_labels = list(labels)  # snapshot for diagnostics
 
     if number_iterations == 0:
         number_iterations = 100000 #set so that it will loop until convergence
@@ -1181,6 +1241,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                 if (diff_ssd/ssd_og) < 0.1:
                     if labels[i] not in force_include_mols:
                         delMols.append(labels[i])
+                        if labels[i] not in removal_log:
+                            removal_log[labels[i]] = (iteration - 1, f'Low SNR (max SNR = {max(snr_arr):.2f} ≤ 2.5) with negligible fit contribution (ΔSSD/SSD = {diff_ssd/ssd_og:.4f} < 0.10)')
 
         '''
         Removing molecules if only assigned to one blended line and is less than 40% of its strength
@@ -1188,6 +1250,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
         for de in all_carriers:
             if all_carriers[de] == 0 and de not in force_include_mols:
                 delMols.append(de)
+                if de not in removal_log:
+                    removal_log[de] = (iteration - 1, 'No dominant carrier lines: never ≥40% of any observed peak intensity')
 
         '''
         Extra strict removal policy if molecule is only in blended lines or only assigned to one line.
@@ -1200,6 +1264,10 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                         #if max(individual_contributions[l]) <= 3.0*rms:
                         if max(snr_arr) <= 3.0:
                             delMols.append(l)
+                            if l not in removal_log:
+                                reason = ('Stricter mode: only blended lines' if non_blended_lines[l] == 0
+                                          else 'Stricter mode: assigned to ≤1 line')
+                                removal_log[l] = (iteration - 1, f'{reason} and max SNR = {max(snr_arr):.2f} ≤ 3.0')
 
         '''
         Removing molecules if too many lines are missing.
@@ -1258,18 +1326,23 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                     if max(snr_arr) <= 3.1:
                         if missingCount/len(peak_freqs_filtered) >= 0.1:
                             missingDeletion = True
+                            _missing_reason = f'Too many missing lines (integral check): {missingCount}/{len(peak_freqs_filtered)} ({missingCount/len(peak_freqs_filtered):.0%}) missing at max SNR = {max(snr_arr):.2f} ≤ 3.1 (threshold ≥10%)'
                     #if max(individual_contributions[i]) < 10*rms:
                     if max(snr_arr) < 10:
                         if missingCount/len(peak_freqs_filtered) >= 0.2:
                             missingDeletion = True
+                            _missing_reason = f'Too many missing lines (integral check): {missingCount}/{len(peak_freqs_filtered)} ({missingCount/len(peak_freqs_filtered):.0%}) missing at max SNR = {max(snr_arr):.2f} < 10 (threshold ≥20%)'
                     #if max(individual_contributions[i]) < 15*rms:
                     if max(snr_arr) < 15:
                         if missingCount/len(peak_freqs_filtered) >= 0.5:
                             missingDeletion = True
+                            _missing_reason = f'Too many missing lines (integral check): {missingCount}/{len(peak_freqs_filtered)} ({missingCount/len(peak_freqs_filtered):.0%}) missing at max SNR = {max(snr_arr):.2f} < 15 (threshold ≥50%)'
 
                     #deleting if too many missing lines 
                     if missingDeletion == True:
                         delMols.append(i)
+                        if i not in removal_log:
+                            removal_log[i] = (iteration - 1, _missing_reason)
 
                 #now checking if there are any missing lines by maximum intensity
                 mask = peak_ints_full > 1.5*peak_rms #get all peaks above 1.5 sigma
@@ -1559,7 +1632,9 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                         snr_arr = individual_contributions[i]/rms_arr_full
                         #if max(individual_contributions[i]) < 8*rms:
                         if max(snr_arr) < 8:
-                            delMols.append(i)        
+                            delMols.append(i)
+                            if i not in removal_log:
+                                removal_log[i] = (iteration - 1, f'Too many missing lines (peak intensity check): {missingMaxCount}/{len(peak_freqs_filtered)} ({missingMaxCount/len(peak_freqs_filtered):.0%}) missing at max SNR = {max(snr_arr):.2f} < 8 (threshold ≥18%)')
 
         potential_delMols = [i for i in potential_delMols if i not in force_include_mols]
         potential_delMols = list(dict.fromkeys(potential_delMols))  # Remove duplicates while preserving order
@@ -1646,5 +1721,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
     
     unique_all_delMols = list(set(all_delMols))
     print(f'\nTotal molecules removed across all iterations: {len(unique_all_delMols)}')
+
+    if save_diagnostics:
+        write_fit_diagnostics(subdirec, initial_labels, removal_log, labels)
     
     return all_delMols, cdDF, peak_df, internal_data
