@@ -138,7 +138,7 @@ beam_minor_axis=0.4
 
 
 **Notes:**
- **only_previously_detected_mols:** Is useful if you don't expect to detect any new, previously-undetected molecules in the data and are having false-positive assignments. This functionality requires the most updated Dropbox files to be downloaded (from March 2026).
+- **only_previously_detected_mols:** Is useful if you don't expect to detect any new, previously-undetected molecules in the data and are having false-positive assignments. This functionality requires the most updated Dropbox files to be downloaded (from March 2026).
 - **force_ignore_molecules:** Can add molecules to this list if there are false-positive assignments
 - **force_include_molecules:** Can add molecules to test if they are present in the data
 - **Important:** Molecule names in list must match the first columns of the `all_cdms_final_official.csv` or `all_jpl_final_offiical.csv` files downloaded from [Dropbox](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). For example, `CH3OH, vt = 0 - 2` and `HC3N, (0,0,0,0)`. These are the names stored in the `column_density_results.csv` output file, so they can be copied from there into the `force_ignore_molecules` list if needed.
