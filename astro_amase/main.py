@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, Union, List
 import numpy as np
 import warnings
 import shutil
+import pandas as pd
 from .config.config_handler import load_config_file, get_parameters
 from .constants import ckm
 from .analysis.determine_linewidth import find_linewidth, find_linewidth_standalone
@@ -124,6 +125,10 @@ def assign_observations(
             Whether to save .txt files containing the simulated spectra (frequency and intensity, tab separated) of each assigned molecule.
             The total summed simulated spectrum is also saved along with the residual between the simulated spectrum and observes spectrum.
             Default: False
+        - save_diagnostics: bool, optional
+            Whether to save .txt files containing diagnostics of vlsr determination and best-fit model. Useful for troubleshooting. Default: False
+        - only_previously_detected_mols: bool, optional
+            Only consider molecules that have been previously detected in ISM. Default: False
     
     Returns
     -------
@@ -361,7 +366,8 @@ def get_source_parameters(
     beam_major_axis: Optional[float] = None,
     beam_minor_axis: Optional[float] = None,
     vlsr_range: Optional[List[float]] = None,
-    vlsr_mols: Optional[str] = 'all'
+    vlsr_mols: Optional[str] = 'all',
+    save_diagnostics: Optional[bool] = False,
 ) -> Dict[str, Any]:
     """
     Determine source parameters (linewidth, VLSR, temperature) without full assignment.
@@ -518,7 +524,7 @@ def get_source_parameters(
     if rms_noise is None:
         peak_data = load_data_get_peaks(
             spectrum_path, sigma_threshold, dv_mhz,
-            obs_type, bmaj_or_dish, bmin, rms_noise, None, None
+            obs_type, bmaj_or_dish, bmin, rms_noise, None, None, dv_value_freq_og
         )
         rms = peak_data['rms']
     else:
@@ -536,7 +542,7 @@ def get_source_parameters(
             vlsr_known, vlsr, temperature_is_exact, temperature,
             directory_path, freq_arr, int_arr, resolution,
             dv_mhz, data, consider_hyperfine, min_separation,
-            dv_kms, ll0, ul0, continuum_temperature, rms_original, bandwidth, source_size, vlsr_range, vlsr_mols
+            dv_kms, ll0, ul0, continuum_temperature, rms_original, bandwidth, source_size, vlsr_range, vlsr_mols, save_diagnostics,directory_path
         )
         
         print(f"\nDetermined VLSR: {best_vlsr:.2f} km/s")
@@ -643,6 +649,10 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Whether to save .txt files containing the simulated spectra (frequency and intensity, tab separated) of each assigned molecule.
             The total summed simulated spectrum is also saved along with the residual between the simulated spectrum and observes spectrum.
             Default: False
+        - save_diagnostics: bool, optional
+            Whether to save .txt files containing diagnostics of vlsr determination and best-fit model. Useful for troubleshooting. Default: False
+        - only_previously_detected_mols: bool, optional
+            Only consider molecules that have been previously detected in ISM. Default: False
     Returns
     -------
     results : dict
@@ -785,7 +795,33 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
                     shutil.rmtree(os.path.join(subfolder_path,'individual_contributions'))
                 os.makedirs(os.path.join(subfolder_path,'individual_contributions'))
 
+    #handling only_previously_detected_mols
+    if user_outputs['only_previously_detected_mols']:
+        try:
+            new_ignore_mols = []
+            jplDF_original = pd.read_csv(os.path.join(user_outputs['directory_path'], 'all_jpl_final_official.csv'))
+            jplMolNames = list(jplDF_original['name'])
+            jplDetected = list(jplDF_original['detected_in_ism'])
+            cdmsDF_original = pd.read_csv(os.path.join(user_outputs['directory_path'], 'all_cdms_final_official.csv'))
+            cdmsMolNames = list(cdmsDF_original['mol'])
+            cdmsDetected = list(cdmsDF_original['detected_in_ism'])
 
+            for j in range(len(jplMolNames)):
+                if jplDetected[j] == 'n':
+                    new_ignore_mols.append(jplMolNames[j])
+            for j in range(len(cdmsMolNames)):
+                if cdmsDetected[j] == 'n':
+                    new_ignore_mols.append(cdmsMolNames[j])
+            
+
+            old_ignore_mols = user_outputs['force_ignore_molecules']
+            full_ignore_mols = old_ignore_mols + new_ignore_mols
+            user_outputs['force_ignore_molecules'] = full_ignore_mols
+        except:
+            user_outputs['only_previously_detected_mols'] = False
+            warnings.warn("IMPORTANT: There was an issue with only_previously_detected_mols. The required Dropbox files were updated March 2026. The most updated versions are required for this functionality, so please download the updated files. Running with only_previously_detected_mols=False", UserWarning)
+
+    #print(user_outputs['force_ignore_molecules'])
 
 
 
@@ -839,7 +875,9 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             bandwidth,
             user_outputs['source_size'],
             user_outputs['vlsr_range'],
-            user_outputs['vlsr_mols']
+            user_outputs['vlsr_mols'],
+            user_outputs['save_diagnostics'],
+            subfolder_path
 
         )
     else:
@@ -884,6 +922,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     # Create dataset
     print("\n=== Creating Molecular Candidate Dataset ===")
     print("Scraping catalogs and creating dataset...")
+    if user_outputs['only_previously_detected_mols']:
+        print('\nNote: The upcoming printed statements about force-ignored molecules are due to only_previously_detected_mols=True. They are not a cause for concern.\n')
     all_loaded, noCanFreq, noCanInts, splatDict, cont_obj = create_full_dataset(
         user_outputs['directory_path'],
         peak_data['spectrum_freqs'],
@@ -930,7 +970,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, best_vlsr,
         peak_data['spectrum_freqs'],
         peak_data['spectrum_ints'],
-        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['save_individual_contributions'], peak_data['rms_full_arr'], user_outputs['fitting_iterations']
+        peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['save_individual_contributions'], peak_data['rms_full_arr'], user_outputs['fitting_iterations'], user_outputs['save_diagnostics']
     )
 
     fit_time = time.perf_counter()
@@ -1077,6 +1117,10 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             Whether to save .txt files containing the simulated spectra (frequency and intensity, tab separated) of each assigned molecule.
             The total summed simulated spectrum is also saved along with the residual between the simulated spectrum and observes spectrum.
             Default: False
+        - save_diagnostics: bool, optional
+            Whether to save .txt files containing diagnostics of vlsr determination and best-fit model. Useful for troubleshooting. Default: False
+        - only_previously_detected_mols: bool, optional
+            Only consider molecules that have been previously detected in ISM. Default: False
 
         
     
@@ -1130,7 +1174,10 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'save_name',
         'overwrite_old_files',
         'consider_structure',
-        'save_individual_contributions'
+        'save_individual_contributions',
+        'save_diagnostics',
+        'only_previously_detected_mols'
+
     }
 
     #printing a warning if an unexpected parameter is inputted
@@ -1200,7 +1247,9 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'save_name': kwargs.get('save_name', 'default_name'),
         'overwrite_old_files': kwargs.get('overwrite_old_files', False),
         'consider_structure': kwargs.get('consider_structure', True),
-        'save_individual_contributions': kwargs.get('save_individual_contributions', False)
+        'save_individual_contributions': kwargs.get('save_individual_contributions', False),
+        'save_diagnostics': kwargs.get('save_diagnostics', False),
+        'only_previously_detected_mols': kwargs.get('only_previously_detected_mols', False)
         
     }
 

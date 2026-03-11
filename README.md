@@ -71,7 +71,7 @@ pip install -e .
 
 ### Required Database Files
 
-The package requires several files to be downloaded from the following [Dropbox folder](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). This folder was last updated December 2, 2025, so if you had downloaded these files prior to this date, I would recommend re-downloading. These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
+The package requires several files to be downloaded from the following [Dropbox folder](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). This folder was last updated March 11, 2026, so if you had downloaded these files prior to this date, I would recommend re-downloading. These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
 
 ### 📓 Extensive Usage Examples
 
@@ -298,16 +298,18 @@ Paper is in prep!
 ## Requirements
 
 - Python ≥ 3.8
-- pandas ≥ 1.3.0
-- numpy ≥ 1.20.0
-- rdkit ≥ 2021.09.1
-- scipy ≥ 1.7.0
-- bokeh ≥ 2.4.0
-- numba ≥ 0.54.0
-- astropy ≥ 4.3.0
-- matplotlib ≥ 3.4.0
-- pyyaml ≥ 5.4.0
-- astrochem_embedding ≥ 0.1.0
+- pandas == 3.0.1
+- numpy == 2.2.6
+- torch == 2.10.0
+- rdkit == 2025.9.6
+- scipy == 1.13.1
+- bokeh == 3.8.2
+- numba == 0.64.0
+- astropy == 7.2.0
+- matplotlib == 3.10.8
+- pyyaml == 6.0.3
+- astrochem_embedding == 0.2.0
+- group-selfies @ git+https://github.com/aspuru-guzik-group/group-selfies.git
 
 ## License
 

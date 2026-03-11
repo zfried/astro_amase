@@ -132,11 +132,13 @@ beam_minor_axis=0.4
 | Parameter | Type | Default | Description | Example |
 |-----------|------|---------|-------------|---------|
 | `valid_atoms` | `list[str]` | `['C', 'O', 'H', 'N', 'S']` | Atomic symbols that could be present | `['C', 'O', 'H', 'N', 'S', 'Si']` |
+| `only_previously_detected_mols` | `bool` | `False` | Only consider molecules that have been previously detected in ISM| `True` |
 | `force_ignore_molecules` | `list[str]` | `[]` | Molecules to forcibly exclude | `['CH334SH, vt le 2', 'l-13CC3H2']` |
 | `force_include_molecules` | `list[str]` | `[]` | Molecules to forcibly include | `['HC3N, (0,0,0,0)']` |
 
 
 **Notes:**
+ **only_previously_detected_mols:** Is useful if you don't expect to detect any new, previously-undetected molecules in the data and are having false-positive assignments. This functionality requires the most updated Dropbox files to be downloaded (from March 2026).
 - **force_ignore_molecules:** Can add molecules to this list if there are false-positive assignments
 - **force_include_molecules:** Can add molecules to test if they are present in the data
 - **Important:** Molecule names in list must match the first columns of the `all_cdms_final_official.csv` or `all_jpl_final_offiical.csv` files downloaded from [Dropbox](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=hqrts8cd&dl=0). For example, `CH3OH, vt = 0 - 2` and `HC3N, (0,0,0,0)`. These are the names stored in the `column_density_results.csv` output file, so they can be copied from there into the `force_ignore_molecules` list if needed.
@@ -194,6 +196,7 @@ beam_minor_axis=0.4
 | `save_name` | `str` | `'default_name'` | Subdirectory name for output files | `'tmc1_analysis'` |
 | `overwrite_old_files` | `bool` | `False` | Overwrite existing output files in the directory with the same  `save_name`| `True` to replace old results (and save space on computer) |
 | `save_individual_contributions` | `bool` | `False` | Save individual molecule simulated spectra, total summed simulated spectrum, and residual between observational data and summed simulated spectrum | `True` for detailed analysis |
+| `save_diagnostics` | `bool` | `False` | Save diagnostic text files for VLSR determination and spectral fitting. Writes `vlsr_diagnostics.txt` (top VLSR bins and candidate molecules) and `fit_diagnostics.txt` (all removed molecules and their removal reason) to the output subdirectory | `True` for debugging or to inspect intermediate results |
 
 **Output Structure:**
 ```
@@ -203,7 +206,9 @@ directory_path/
     ├── assignment_results.txt
     ├── interactive_spectrum.html
     ├── column_densities.txt
-    └── [individual spectra if save_individual_contributions=True]
+    ├── [individual spectra if save_individual_contributions=True]
+    ├── [vlsr_diagnostics.txt if save_diagnostics=True]
+    └── [fit_diagnostics.txt if save_diagnostics=True]
 ```
 
 **Recommendations:**
