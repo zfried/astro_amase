@@ -336,7 +336,7 @@ def get_linewidth(
         # Load peaks to get calculated RMS
         peak_data = load_data_get_peaks(
             spectrum_path, sigma_threshold, dv_mhz,
-            obs_type, bmaj_or_dish, bmin, rms_noise, None, None
+            obs_type, bmaj_or_dish, bmin, rms_noise, None, None, dv_mhz
         )
         rms = peak_data['rms']
     else:
