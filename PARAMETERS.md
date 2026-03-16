@@ -135,6 +135,8 @@ beam_minor_axis=0.4
 | `only_previously_detected_mols` | `bool` | `False` | Only consider molecules that have been previously detected in ISM| `True` |
 | `force_ignore_molecules` | `list[str]` | `[]` | Molecules to forcibly exclude | `['CH334SH, vt le 2', 'l-13CC3H2']` |
 | `force_include_molecules` | `list[str]` | `[]` | Molecules to forcibly include | `['HC3N, (0,0,0,0)']` |
+| `extra_vlsr_checks` | `bool` | `False` | Be extra careful with vlsr finding | `True` |
+
 
 
 **Notes:**
