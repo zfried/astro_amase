@@ -129,6 +129,8 @@ def assign_observations(
             Whether to save .txt files containing diagnostics of vlsr determination and best-fit model. Useful for troubleshooting. Default: False
         - only_previously_detected_mols: bool, optional
             Only consider molecules that have been previously detected in ISM. Default: False
+        - extra_vlsr_checks: bool, optional
+            Be extra careful and conduct some extra tests when finding vlsr. Automatically True if bandwidth < 15 GHz Default: False.
     
     Returns
     -------
@@ -368,6 +370,7 @@ def get_source_parameters(
     vlsr_range: Optional[List[float]] = None,
     vlsr_mols: Optional[str] = 'all',
     save_diagnostics: Optional[bool] = False,
+    extra_vlsr_checks: Optional[bool] = False
 ) -> Dict[str, Any]:
     """
     Determine source parameters (linewidth, VLSR, temperature) without full assignment.
@@ -392,7 +395,7 @@ def get_source_parameters(
         If vlsr is not provided, this is used as initial guess for optimization.
     vlsr : float, optional
         VLSR in km/s. If not provided, will be determined automatically.
-    linewidth: float, optional
+    linewidth : float, optional
         Linewidth in km/s. If not provided, will be determined automatically.
     rms_noise : float, optional
         RMS noise level. If not provided, calculated automatically.
@@ -400,11 +403,27 @@ def get_source_parameters(
         Continuum temperature in Kelvin. Default: 2.7
     dish_diameter : float, optional
         Dish diameter in meters (for single dish observations). Default: 100.0
+    source_size : float, optional
+        Source size in arcseconds for beam dilution in spectral simulations.
+        Default: 1e20 (effectively fills the beam).
     beam_major_axis : float, optional
-        Beam major axis in arcseconds (required for interferometric)
+        Beam major axis in arcseconds (required for interferometric observations).
     beam_minor_axis : float, optional
-        Beam minor axis in arcseconds (required for interferometric)
-    
+        Beam minor axis in arcseconds (required for interferometric observations).
+    vlsr_range : list of float, optional
+        Two-element list [min_vlsr, max_vlsr] (km/s) defining the search window
+        for VLSR candidates. Default: [-250, 250].
+    vlsr_mols : str or list of str, optional
+        If 'all', searches all molecules in the VLSR database. Otherwise, a list
+        of molecule name strings to restrict the candidate search. Default: 'all'.
+    save_diagnostics : bool, optional
+        If True, writes diagnostic output files to directory_path summarizing
+        VLSR candidate filtering and window selection. Default: False.
+    extra_vlsr_checks : bool, optional
+        If True, applies additional candidate validation requiring that predicted
+        >5-sigma lines of the candidate are present in the observed spectrum.
+        Automatically enabled when bandwidth < 15000 MHz. Default: False.
+
     Returns
     -------
     results : dict
@@ -415,6 +434,8 @@ def get_source_parameters(
         - 'temperature': Determined or input temperature (K)
         - 'rms': RMS noise level (K)
         - 'resolution': Spectral resolution (MHz)
+        - 'mols_used_in_analysis': Molecule names used in VLSR determination,
+          or the input vlsr_mols value if VLSR was provided directly.
     
     Examples
     --------
@@ -542,7 +563,7 @@ def get_source_parameters(
             vlsr_known, vlsr, temperature_is_exact, temperature,
             directory_path, freq_arr, int_arr, resolution,
             dv_mhz, data, consider_hyperfine, min_separation,
-            dv_kms, ll0, ul0, continuum_temperature, rms_original, bandwidth, source_size, vlsr_range, vlsr_mols, save_diagnostics,directory_path
+            dv_kms, ll0, ul0, continuum_temperature, rms_original, bandwidth, source_size, vlsr_range, vlsr_mols, save_diagnostics,directory_path, extra_vlsr_checks
         )
         
         print(f"\nDetermined VLSR: {best_vlsr:.2f} km/s")
@@ -653,6 +674,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Whether to save .txt files containing diagnostics of vlsr determination and best-fit model. Useful for troubleshooting. Default: False
         - only_previously_detected_mols: bool, optional
             Only consider molecules that have been previously detected in ISM. Default: False
+        - extra_vlsr_checks: bool, optional
+            Be extra careful and conduct some extra tests when finding vlsr. Automatically True if bandwidth < 15 GHz Default: False.
     Returns
     -------
     results : dict
@@ -877,8 +900,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             user_outputs['vlsr_range'],
             user_outputs['vlsr_mols'],
             user_outputs['save_diagnostics'],
-            subfolder_path
-
+            subfolder_path,
+            user_outputs['extra_vlsr_checks']
         )
     else:
         best_vlsr = user_outputs['vlsr_input']
@@ -922,8 +945,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     # Create dataset
     print("\n=== Creating Molecular Candidate Dataset ===")
     print("Scraping catalogs and creating dataset...")
-    if user_outputs['only_previously_detected_mols']:
-        print('\nNote: The upcoming printed statements about force-ignored molecules are due to only_previously_detected_mols=True. They are not a cause for concern.\n')
+    #if user_outputs['only_previously_detected_mols']:
+    #    print('\nNote: The upcoming printed statements about force-ignored molecules are due to only_previously_detected_mols=True. They are not a cause for concern.\n')
     all_loaded, noCanFreq, noCanInts, splatDict, cont_obj = create_full_dataset(
         user_outputs['directory_path'],
         peak_data['spectrum_freqs'],
@@ -935,7 +958,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         ll0, ul0, freq_arr, resolution,
         user_outputs['continuum_temperature'],
         user_outputs['force_ignore_molecules'],
-        subfolder_path
+        subfolder_path,
+        user_outputs['only_previously_detected_mols']
     )
     dataset_time = time.perf_counter()
     print(f'Dataset creation time: {round((dataset_time - param_time) / 60, 2)} minutes')
@@ -1121,6 +1145,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             Whether to save .txt files containing diagnostics of vlsr determination and best-fit model. Useful for troubleshooting. Default: False
         - only_previously_detected_mols: bool, optional
             Only consider molecules that have been previously detected in ISM. Default: False
+        - extra_vlsr_checks: bool, optional
+            Be extra careful and conduct some extra tests when finding vlsr. Automatically True if bandwidth < 15 GHz Default: False.
 
         
     
@@ -1176,7 +1202,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'consider_structure',
         'save_individual_contributions',
         'save_diagnostics',
-        'only_previously_detected_mols'
+        'only_previously_detected_mols',
+        'extra_vlsr_checks',
 
     }
 
@@ -1249,7 +1276,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'consider_structure': kwargs.get('consider_structure', True),
         'save_individual_contributions': kwargs.get('save_individual_contributions', False),
         'save_diagnostics': kwargs.get('save_diagnostics', False),
-        'only_previously_detected_mols': kwargs.get('only_previously_detected_mols', False)
+        'only_previously_detected_mols': kwargs.get('only_previously_detected_mols', False),
+        'extra_vlsr_checks': kwargs.get('extra_vlsr_checks', False),
         
     }
 
