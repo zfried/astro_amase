@@ -941,6 +941,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
         Main directory containing catalog files and for output storage.
         Expected subdirectories: 'cdms_pkl/', 'jpl_pkl/'
         Expected catalog files: 'all_cdms_final_official.csv', 'all_jpl_final_official.csv'
+    subdirec: str
+        Path to subdirectory in which outputs will be saved
     dataScrape : Observation
         molsim Observation object containing observational spectrum and frequency grid.
     tempInput : float
@@ -977,6 +979,8 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
         Number of fitting iterations to perform. Must be 0 or >= 2. Default is 2.
         Each iteration after the first performs molecule filtering followed by refitting.
         If num_iterations = 0, will loop until convergence.
+    save_diagnostics: bool
+        Save .txt files regarding the diagnostic details of the fit (i.e. which molecules are removed and why)
     
     Returns
     -------
@@ -1045,6 +1049,25 @@ def full_fit(direc, subdirec, assigner, dataScrape, tempInput, dv_value, dv_valu
                         delList1.append(g[0])
 
     assignedMols = [i for i in assignedMols if i[0] not in delList1 and i[0] not in blended_mols_final]
+
+
+
+    '''
+    This is a quality control check. The C2H3CN catalogs for JPL and CDMS cause some issues, so just ensuring
+    that only one is assigned so that they are not competing with each other in the fit. 
+    '''
+    hasJPLvinyl = False
+    hasCDMSvinyl = False
+
+    for a in assignedMols:
+        if a[0] == 'C2H3CN' and a[1] == 'JPL':
+            hasJPLvinyl = True
+        if 'C2H3CN, v = 0' in a[0] and a[1] == 'CDMS':
+            hasCDMSvinyl = True
+
+    if hasCDMSvinyl and hasJPLvinyl:
+        assignedMols =  [x for x in assignedMols if x != ('C2H3CN','JPL')]
+
 
     # Diagnostics: log molecules removed by pre-fit QC
     removal_log = {}  # {mol_name: (iteration, reason)}
