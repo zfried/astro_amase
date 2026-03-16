@@ -202,7 +202,7 @@ def create_folders_load_data(direc, tempInput):
 
 
 
-def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrape,vlsr_value, dv_value_freq, consider_hyperfine, user_temp,sourceSize,ll0,ul0, freq_arr,resolution, cont_temp, ignore_mol_list, subdirec):
+def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrape,vlsr_value, dv_value_freq, consider_hyperfine, user_temp,sourceSize,ll0,ul0, freq_arr,resolution, cont_temp, ignore_mol_list, subdirec, only_detected_mols):
     """
     Generate comprehensive molecular candidate dataset for all spectral lines with simulated spectra.
     
@@ -702,9 +702,9 @@ def create_full_dataset(direc, spectrum_freqs, spectrum_ints,dv_value, dataScrap
     dfMolSmiles['smiles'] = mol_smileSmiles
     dfMolSmiles.to_csv(os.path.join(subdirec, 'mol_smiles.csv'), index=False)
 
-
-    for p in ignoreMolDict:
-        if ignoreMolDict[p] == False:
-            print('Algorithm was forced to ignore',p,'but never came across a line for which this was a potential candidate.')
+    if only_detected_mols == False: #print out diagnostic statements if only_detected_mols is False
+        for p in ignoreMolDict:
+            if ignoreMolDict[p] == False:
+                print('Algorithm was forced to ignore',p,'but never came across a line for which this was a potential candidate.')
     return all_loaded, noCanFreq, noCanInts, splatDict, cont_obj
 
