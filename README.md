@@ -8,7 +8,7 @@
 
 - ⚙️ [Parameter Guide](PARAMETERS.md)
 - 📓 [Example Notebook](notebooks/example_notebook.ipynb)
-- 📦 [Required Database Files (Dropbox)](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=ww24of6d&dl=0)
+- 📦 [Required Database Files (Dropbox)](https://www.dropbox.com/scl/fo/r5trqr0ua8y4yxbcwc47k/AEXQaGWZ88rjBhZpx0wadP0?rlkey=11uzyacot910qttpqhv3g6byr&st=1e1h6muh&dl=0)
 
 Astro AMASE is a comprehensive Python package for automated molecular line identification...
 ## Features
@@ -71,7 +71,7 @@ pip install -e .
 
 ### Required Database Files
 
-The package requires several files to be downloaded from the following [Dropbox folder](https://www.dropbox.com/scl/fo/s1dhye6mrdistrm0vbim7/ALRlugfuxnsHZU4AisPWjig?rlkey=7fk1obwvkeihlo8jt84g2wqfr&st=ww24of6d&dl=0). This folder was last updated March 11, 2026, so if you had downloaded these files prior to this date, I would recommend re-downloading. These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
+The package requires several files to be downloaded from the following [Dropbox folder](https://www.dropbox.com/scl/fo/r5trqr0ua8y4yxbcwc47k/AEXQaGWZ88rjBhZpx0wadP0?rlkey=11uzyacot910qttpqhv3g6byr&st=1e1h6muh&dl=0). This folder was last updated March 11, 2026, so if you had downloaded these files prior to this date, I would recommend re-downloading. These files are relatively large and include local copies of the CDMS and JPL molecular databases, as well as **molsim** `Molecule` objects for the catalogs. All files should be saved in the same local directory where your output files will be written. The path to this directory should then be provided as the directory_path argument in the relevant functions.
 
 ### 📓 Extensive Usage Examples
 
