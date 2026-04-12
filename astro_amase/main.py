@@ -131,7 +131,13 @@ def assign_observations(
             Only consider molecules that have been previously detected in ISM. Default: False
         - extra_vlsr_checks: bool, optional
             Be extra careful and conduct some extra tests when finding vlsr. Automatically True if bandwidth < 15 GHz Default: False.
-    
+        - few_line_spectrum: bool, optional
+            If True, apply extra caution with isotopologue assignments in spectra with few lines.
+            In such spectra, a slightly better frequency match may cause an isotopologue to outscore
+            the main species, even though the main species is far more abundant and likely. When
+            enabled, if the top-scoring candidate is an isotopologue and the main isotopologue of
+            the same molecule scores >= 95, the assignment is switched to the main species. Default: False.
+
     Returns
     -------
     results : dict
@@ -676,6 +682,12 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
             Only consider molecules that have been previously detected in ISM. Default: False
         - extra_vlsr_checks: bool, optional
             Be extra careful and conduct some extra tests when finding vlsr. Automatically True if bandwidth < 15 GHz Default: False.
+        - few_line_spectrum: bool, optional
+            If True, apply extra caution with isotopologue assignments in spectra with few lines.
+            In such spectra, a slightly better frequency match may cause an isotopologue to outscore
+            the main species, even though the main species is far more abundant and likely. When
+            enabled, if the top-scoring candidate is an isotopologue and the main isotopologue of
+            the same molecule scores >= 95, the assignment is switched to the main species. Default: False.
     Returns
     -------
     results : dict
@@ -979,7 +991,7 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         user_outputs['consider_structure'],
         noise_is_dict=noise_is_dict,
         known_molecules=user_outputs.get('known_molecules', None),
-
+        few_line_spectrum=user_outputs.get('few_line_spectrum', False),
     )
     assign_time = time.perf_counter()
     print(f'Line assignment time: {round((assign_time - dataset_time) / 60, 2)} minutes')
@@ -997,6 +1009,25 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
         peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['save_individual_contributions'], peak_data['rms_full_arr'], user_outputs['fitting_iterations'], user_outputs['save_diagnostics']
     )
 
+    # If few_line_spectrum is active and any overridden main species was removed during fitting,
+    # restore the original isotopologue assignments and re-run the fit.
+    if user_outputs.get('few_line_spectrum', False):
+        fallback_applied = assigner.apply_few_line_spectrum_fallback(delMols)
+        if fallback_applied:
+            print("\n=== Re-fitting with Isotopologue Fallback (few_line_spectrum) ===")
+            print("WARNING: The main species selected by few_line_spectrum was removed during fitting. "
+                  "Restoring original isotopologue assignment(s) and re-running the fit.")
+            delMols, column_density_df, assignment_df, internal_data = full_fit(
+                user_outputs['directory_path'],
+                subfolder_path,
+                assigner, peak_data['data'],
+                best_temp, dv_value, dv_value_freq,
+                ll0, ul0, best_vlsr,
+                peak_data['spectrum_freqs'],
+                peak_data['spectrum_ints'],
+                peak_data['rms'], cont_obj, user_outputs['force_include_molecules'], user_outputs['source_size'], user_outputs['column_density_range'], resolution, dv_value_freq_og, user_outputs['stricter'], user_outputs['save_individual_contributions'], peak_data['rms_full_arr'], user_outputs['fitting_iterations'], user_outputs['save_diagnostics']
+            )
+
     fit_time = time.perf_counter()
     print(f'Best-fit model time: {round((fit_time - assign_time) / 60, 2)} minutes')
     
@@ -1004,7 +1035,8 @@ def run_pipeline(user_outputs: Dict[str, Any]) -> Dict[str, Any]:
     assignMols, stat_dict = remove_molecules_and_write_output(
         assigner, delMols,
         subfolder_path,
-        best_temp, dv_value, best_vlsr
+        best_temp, dv_value, best_vlsr,
+        few_line_spectrum=user_outputs.get('few_line_spectrum', False),
     )
     
     final_time = time.perf_counter()
@@ -1147,9 +1179,15 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
             Only consider molecules that have been previously detected in ISM. Default: False
         - extra_vlsr_checks: bool, optional
             Be extra careful and conduct some extra tests when finding vlsr. Automatically True if bandwidth < 15 GHz Default: False.
+        - few_line_spectrum: bool, optional
+            If True, apply extra caution with isotopologue assignments in spectra with few lines.
+            In such spectra, a slightly better frequency match may cause an isotopologue to outscore
+            the main species, even though the main species is far more abundant and likely. When
+            enabled, if the top-scoring candidate is an isotopologue and the main isotopologue of
+            the same molecule scores >= 95, the assignment is switched to the main species. Default: False.
 
-        
-    
+
+
     Returns
     -------
     params : dict
@@ -1204,6 +1242,7 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'save_diagnostics',
         'only_previously_detected_mols',
         'extra_vlsr_checks',
+        'few_line_spectrum',
 
     }
 
@@ -1278,7 +1317,8 @@ def _build_parameters_from_kwargs(spectrum_path: str, directory_path: str, **kwa
         'save_diagnostics': kwargs.get('save_diagnostics', False),
         'only_previously_detected_mols': kwargs.get('only_previously_detected_mols', False),
         'extra_vlsr_checks': kwargs.get('extra_vlsr_checks', False),
-        
+        'few_line_spectrum': kwargs.get('few_line_spectrum', False),
+
     }
 
     if params['fitting_iterations'] == 1:

@@ -103,8 +103,12 @@ def write_output_text(assignment: 'IterativeSpectrumAssignment',
         
         elif line.assignment_status.value == 'assigned':
             f.write('Assigned to: ' + line.assigned_molecule + ' (' + line.assigned_smiles + ')\n')
-            
-            assignList.append((line.assigned_smiles, line.assigned_molecule, 
+            if getattr(line, 'isotopologue_preference_applied', False):
+                f.write('Note: Main isotopologue selected over higher-scoring isotopologue candidate because few_line_spectrum=True. '
+                        'In spectra with few lines, a slightly better frequency match can favor an isotopologue over the '
+                        'more abundant main species. The main isotopologue scored >= 95 and was preferred.\n')
+
+            assignList.append((line.assigned_smiles, line.assigned_molecule,
                              line.best_candidate.global_score, line.best_candidate.linelist))
             assignCount += 1
         
@@ -163,7 +167,8 @@ def remove_molecules_and_write_output(assignment: 'IterativeSpectrumAssignment',
                                        subdirec: str,
                                        temp: float,
                                        dv_value: float,
-                                       vlsr_value: float):
+                                       vlsr_value: float,
+                                       few_line_spectrum: bool = False):
     """
     Remove specified molecules by penalizing their scores, reassign lines, and generate report.
     
@@ -226,7 +231,7 @@ def remove_molecules_and_write_output(assignment: 'IterativeSpectrumAssignment',
     print("Reassigning lines based on updated scores...")
     
     for line in assignment.lines:
-        line.assign(thresh)
+        line.assign(thresh, few_line_spectrum=few_line_spectrum)
     
     # Step 3: Generate output report
     print(f"Writing output report to {os.path.join(subdirec, 'output_report.txt')}...")
@@ -287,8 +292,12 @@ def remove_molecules_and_write_output(assignment: 'IterativeSpectrumAssignment',
         
         elif line.assignment_status.value == 'assigned':
             f.write('Assigned to: ' + line.assigned_molecule + ' (' + line.assigned_smiles + ')\n')
-            
-            assignList.append((line.assigned_smiles, line.assigned_molecule, 
+            if getattr(line, 'isotopologue_preference_applied', False):
+                f.write('Note: Main isotopologue selected over higher-scoring isotopologue candidate because few_line_spectrum=True. '
+                        'In spectra with few lines, a slightly better frequency match can favor an isotopologue over the '
+                        'more abundant main species. The main isotopologue scored >= 95 and was preferred.\n')
+
+            assignList.append((line.assigned_smiles, line.assigned_molecule,
                              line.best_candidate.global_score, line.best_candidate.linelist))
             assignCount += 1
         

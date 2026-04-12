@@ -136,6 +136,7 @@ beam_minor_axis=0.4
 | `force_ignore_molecules` | `list[str]` | `[]` | Molecules to forcibly exclude | `['CH334SH, vt le 2', 'l-13CC3H2']` |
 | `force_include_molecules` | `list[str]` | `[]` | Molecules to forcibly include | `['HC3N, (0,0,0,0)']` |
 | `extra_vlsr_checks` | `bool` | `False` | Be extra careful with vlsr finding | `True` |
+| `few_line_spectrum` | `bool` | `False` | Apply extra caution with isotopologue assignments in spectra with few lines | `True` |
 
 
 
@@ -143,6 +144,7 @@ beam_minor_axis=0.4
 - **only_previously_detected_mols:** Is useful if you don't expect to detect any new, previously-undetected molecules in the data and are having false-positive assignments. This functionality requires the most updated Dropbox files to be downloaded (from March 2026).
 - **force_ignore_molecules:** Can add molecules to this list if there are false-positive assignments
 - **force_include_molecules:** Can add molecules to test if they are present in the data
+- **few_line_spectrum:** In spectra with only a few detected lines, a slightly better frequency match can cause an isotopologue to outscore the more abundant main species. When set to `True`, if the top-scoring candidate is an isotopologue and the main isotopologue of the same molecule also scores ≥ 95, the assignment is switched to the main species. Recommended when working with sparse spectra where isotopologue misassignment is a concern.
 - **Important:** Molecule names in list must match the first columns of the `all_cdms_final_official.csv` or `all_jpl_final_offiical.csv` files downloaded from [Dropbox](https://www.dropbox.com/scl/fo/r5trqr0ua8y4yxbcwc47k/AEXQaGWZ88rjBhZpx0wadP0?rlkey=11uzyacot910qttpqhv3g6byr&st=1e1h6muh&dl=0). For example, `CH3OH, vt = 0 - 2` and `HC3N, (0,0,0,0)`. These are the names stored in the `column_density_results.csv` output file, so they can be copied from there into the `force_ignore_molecules` list if needed.
 
 

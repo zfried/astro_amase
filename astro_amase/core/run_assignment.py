@@ -308,10 +308,10 @@ def load_dataset(direc: str, numMols: int = None) -> Tuple:
             allQn, totalSmiles, totalForms)
 
 
-def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict, 
-                  validAtoms: List[str], dv_value_freq: float, 
+def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict,
+                  validAtoms: List[str], dv_value_freq: float,
                   freq_arr: np.ndarray, rms_arr: np.ndarray, peak_freqs_full: np.ndarray,
-                  known_molecules: List[str] = None, consider_structure: bool = True, noise_is_dict = False) -> Tuple:
+                  known_molecules: List[str] = None, consider_structure: bool = True, noise_is_dict = False, few_line_spectrum: bool = False) -> Tuple:
     """
     Main function to run the iterative spectrum assignment.
     
@@ -370,7 +370,8 @@ def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict,
     assigner = IterativeSpectrumAssignment(
         frequencies=np.array(actualFrequencies),
         intensities=np.array(intensities),
-        context=context
+        context=context,
+        few_line_spectrum=few_line_spectrum,
     )
     
     print("Creating candidate scores for all lines...")
@@ -410,7 +411,8 @@ def run_assignment(temp: float, direc: str, subdirec: str, splatDict: Dict,
     start_time = time.perf_counter()
     
     assigner.assign_all_iteratively()
-    
+    assigner.apply_few_line_spectrum_check()
+
     end_time = time.perf_counter()
     elapsed = end_time - start_time
     
@@ -490,8 +492,8 @@ def save_results(assigner: IterativeSpectrumAssignment,
     #print(f"  {assigned_file}")
 
 
-def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_freq, 
-                       freq_arr, rms_arr, peak_freqs_full, consider_structure, noise_is_dict, known_molecules=None):
+def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_freq,
+                       freq_arr, rms_arr, peak_freqs_full, consider_structure, noise_is_dict, known_molecules=None, few_line_spectrum=False):
     """
     Complete assignment workflow with result saving.
     
@@ -522,7 +524,8 @@ def run_full_assignment(temp, direc, subdirec, splatDict, valid_atoms, dv_value_
         peak_freqs_full=peak_freqs_full,
         known_molecules=known_molecules,
         consider_structure=consider_structure,
-        noise_is_dict = noise_is_dict
+        noise_is_dict = noise_is_dict,
+        few_line_spectrum=few_line_spectrum,
     )
     
     # Save results

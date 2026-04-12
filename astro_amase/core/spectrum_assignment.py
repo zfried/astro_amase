@@ -45,8 +45,11 @@ spectral lines using an iterative, context-aware scoring approach. The process i
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple, Set
 from enum import Enum
+import logging
 import numpy as np
 from collections import defaultdict, Counter
+
+logger = logging.getLogger(__name__)
 
 
 class AssignmentStatus(Enum):
@@ -156,6 +159,13 @@ class SpectralLine:
         
         # Track which iteration this was last scored
         self._last_scored_iteration: int = -1
+
+        # Tracks whether the isotopologue preference was applied during assign()
+        self.isotopologue_preference_applied: bool = False
+
+        # Stores the isotopologue candidate that was overridden by few_line_spectrum,
+        # so it can be restored as a fallback if the main species is later removed by fitting
+        self.overridden_by_few_line_spectrum: Optional[CandidateScore] = None
     
     def add_candidate(self, candidate: CandidateScore):
         """Add a molecular candidate to this line (only done once during initialization)."""
@@ -312,7 +322,7 @@ class SpectralLine:
             key = (candidate.smiles, candidate.formula)
             candidate.combined_score = combined_scores[key]
     
-    def assign(self, local_threshold: float):
+    def assign(self, local_threshold: float, few_line_spectrum: bool = False):
         """
         Determine assignment status based on current scores.
         Uses ORIGINAL global threshold (93.5) for assignment.
@@ -320,25 +330,45 @@ class SpectralLine:
         if not self.candidates: #if no candidates
             self.assignment_status = AssignmentStatus.UNIDENTIFIED
             return
-        
+
         # Sort by global score
         self.candidates.sort(key=lambda c: c.global_score, reverse=True)
         self.best_candidate = self.candidates[0] #top candidate has the best global score
-        
+
+        # If few_line_spectrum is set and the top candidate is an isotopologue, check whether
+        # the main species of the same molecule also scores >= 95. If so, prefer the main species.
+        self.isotopologue_preference_applied = False
+        self.overridden_by_few_line_spectrum = None
+        if few_line_spectrum and self.best_candidate.isotope != 0:
+            main_candidates = [
+                c for c in self.candidates
+                if c.smiles == self.best_candidate.smiles and c.isotope == 0 and c.global_score >= 95
+            ]
+            if main_candidates:
+                best_main = max(main_candidates, key=lambda c: c.global_score)
+                self.overridden_by_few_line_spectrum = self.best_candidate
+                self.best_candidate = best_main
+                self.isotopologue_preference_applied = True
+
         # Get top unique molecules by combined score
         self.top_candidates = self._get_top_by_combined_score(n=5)
-        
+
         best_global = self.best_candidate.global_score
         best_combined = self.best_candidate.combined_score
-        
+
         # Use ORIGINAL threshold (93.5) for assignment
         if best_global < 93.5: #if global score below assignment threshold, line is unassigned
             self.assignment_status = AssignmentStatus.UNIDENTIFIED
         elif best_combined < local_threshold: #if global score above assignment threshold, but combined score too low, it has multiple carriers
-            # Check for multiple carriers
+            # Check for multiple carriers.
+            # If few_line_spectrum swapped an isotopologue out, exclude that isotopologue
+            # so it doesn't inflate the unique molecule count and force a MULTIPLE_CARRIERS status.
             passing = [c for c in self.candidates if c.global_score >= 93.5]
+            if self.isotopologue_preference_applied:
+                passing = [c for c in passing
+                           if not (c.isotope != 0 and c.smiles == self.best_candidate.smiles)]
             unique_mols = len(set((c.smiles, c.formula) for c in passing))
-            
+
             if unique_mols > 1:
                 self.assignment_status = AssignmentStatus.MULTIPLE_CARRIERS
             else:
@@ -558,8 +588,9 @@ class IterativeSpectrumAssignment:
     """
     
     def __init__(self, frequencies: np.ndarray, intensities: np.ndarray,
-                 context: ScoringContext):
+                 context: ScoringContext, few_line_spectrum: bool = False):
         self.context = context
+        self.few_line_spectrum = few_line_spectrum
         
         # Create all spectral lines
         self.lines: List[SpectralLine] = [
@@ -986,7 +1017,7 @@ class IterativeSpectrumAssignment:
 
         '''
         # Assign (uses original 93.5 threshold)
-        line.assign(self.context.local_threshold)
+        line.assign(self.context.local_threshold, few_line_spectrum=self.few_line_spectrum)
         
         # Check if assigned and if should be added to detected
         assigned = line.assignment_status == AssignmentStatus.ASSIGNED
@@ -1116,6 +1147,100 @@ class IterativeSpectrumAssignment:
         #print(override_mols)
         return override_mols
     
+    def apply_few_line_spectrum_check(self):
+        """
+        Post-assignment isotopologue preference sweep.
+
+        Called after assign_all_iteratively() completes but before the fitting stage.
+        For every assigned line where the winner is an isotopologue, check if the main
+        species of the same molecule also scores >= 95. If so, switch the assignment to
+        the main species and flag the line.
+
+        This ensures isotopologue misassignments are corrected before the fitting stage
+        sees them, preventing the fitting stage from having to clean up what should have
+        been caught during assignment.
+        """
+        if not self.few_line_spectrum:
+            return
+
+        swapped = 0
+        for line in self.lines:
+            if line.assignment_status not in (AssignmentStatus.ASSIGNED, AssignmentStatus.MULTIPLE_CARRIERS):
+                continue
+            if line.best_candidate is None or line.best_candidate.isotope == 0:
+                continue
+
+            main_candidates = [
+                c for c in line.candidates
+                if c.smiles == line.best_candidate.smiles and c.isotope == 0 and c.global_score >= 95
+            ]
+            if main_candidates:
+                best_main = max(main_candidates, key=lambda c: c.global_score)
+                old_formula = line.best_candidate.formula
+                line.overridden_by_few_line_spectrum = line.best_candidate
+                line.best_candidate = best_main
+                line.assigned_molecule = best_main.formula
+                line.assigned_smiles = best_main.smiles
+                line.isotopologue_preference_applied = True
+                logger.warning(
+                    f"few_line_spectrum: Line {line.line_index} ({line.frequency:.4f} MHz) — "
+                    f"reassigned from isotopologue '{old_formula}' (score {line.candidates[0].global_score:.2f}) "
+                    f"to main species '{best_main.formula}' (score {best_main.global_score:.2f})"
+                )
+                swapped += 1
+
+        if swapped > 0:
+            print(f"[few_line_spectrum] Reassigned {swapped} line(s) from isotopologue to main species.")
+
+    def apply_few_line_spectrum_fallback(self, del_mols: list) -> bool:
+        """
+        Fallback for few_line_spectrum overrides where the main species was removed by fitting.
+
+        Called after full_fit() returns delMols. For any line where:
+          - few_line_spectrum overrode an isotopologue in favour of the main species, AND
+          - that main species was subsequently removed during the fitting stage (is in del_mols)
+
+        ...restore the line's assignment to the original isotopologue candidate so that
+        a second fitting pass can attempt to fit it instead. If the isotopologue is also
+        removed in that second pass, the line simply ends up unassigned.
+
+        Parameters
+        ----------
+        del_mols : list of str
+            Formula strings of molecules removed by full_fit().
+
+        Returns
+        -------
+        bool
+            True if at least one line was restored, triggering a re-fit. False otherwise.
+        """
+        restored = 0
+        for line in self.lines:
+            if not line.isotopologue_preference_applied:
+                continue
+            if line.assigned_molecule not in del_mols:
+                continue
+            if line.overridden_by_few_line_spectrum is None:
+                continue
+
+            iso_candidate = line.overridden_by_few_line_spectrum
+            logger.warning(
+                f"few_line_spectrum fallback: Line {line.line_index} ({line.frequency:.4f} MHz) — "
+                f"main species '{line.assigned_molecule}' was removed during fitting. "
+                f"Restoring isotopologue '{iso_candidate.formula}' for re-fit."
+            )
+            line.best_candidate = iso_candidate
+            line.assigned_molecule = iso_candidate.formula
+            line.assigned_smiles = iso_candidate.smiles
+            line.isotopologue_preference_applied = False
+            line.overridden_by_few_line_spectrum = None
+            restored += 1
+
+        if restored > 0:
+            print(f"[few_line_spectrum] Restored {restored} line(s) to isotopologue for re-fit.")
+
+        return restored > 0
+
     def assign_all_iteratively(self):
         """
         Main assignment loop with iterative refinement.
@@ -1166,7 +1291,7 @@ class IterativeSpectrumAssignment:
                     
                     # Re-assign
                     old_assignment = prev_line.assigned_smiles
-                    prev_line.assign(self.context.local_threshold)
+                    prev_line.assign(self.context.local_threshold, few_line_spectrum=self.few_line_spectrum)
                     
                     for candidate in prev_line.candidates:
                         if candidate.global_score >= 93.5:
@@ -1265,7 +1390,7 @@ class IterativeSpectrumAssignment:
                 
                 line.rescore_candidates(self.context)
                 line.calculate_softmax_and_combined()
-                line.assign(self.context.local_threshold)
+                line.assign(self.context.local_threshold, few_line_spectrum=self.few_line_spectrum)
                 
                 # Updating highest intensity lists
                 for candidate in line.candidates:
