@@ -7,7 +7,7 @@ name = "astro_amase"
 dynamic = ["version"]
 description = "Automated Molecular Assignment and Source parameter Estimation for radio astronomy"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "Zachary Fried", email = "zfried@mit.edu"}
@@ -32,9 +32,6 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Chemistry",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
@@ -85,7 +82,7 @@ astro_amase = ["examples/*.yaml"]
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py311', 'py312']
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -109,7 +106,7 @@ python_functions = "test_*"
 addopts = "-v --cov=astro_amase --cov-report=html --cov-report=term"
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
